@@ -9,5 +9,5 @@ function App() {
         </>
     );
 }
-
+// npm run dev for local server
 export default App;
