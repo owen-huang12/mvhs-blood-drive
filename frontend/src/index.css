@@ -1,0 +1,124 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Antic Slab', serif;
+  background-color: #f5f0eb;
+  color: #1a1a1a;
+  min-height: 100vh;
+}
+
+/* ── Header ─────────────────────────────────────── */
+.header {
+  background-color: #8b1a1a;
+  padding: 18px 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-title {
+  color: #fff;
+  font-size: 1.3rem;
+  letter-spacing: 0.02em;
+}
+
+.header-icon {
+  height: 48px;
+  width: auto;
+}
+
+/* ── Page layout ─────────────────────────────────── */
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 56px 24px 80px;
+}
+
+/* ── Overview section ────────────────────────────── */
+.section-title {
+  font-size: 1.6rem;
+  margin-bottom: 20px;
+  color: #8b1a1a;
+}
+
+.overview-text p {
+  font-size: 1rem;
+  line-height: 1.8;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+/* ── Form section ────────────────────────────────── */
+.form-section {
+  margin-top: 52px;
+}
+
+.form-prompt {
+  font-size: 1.1rem;
+  margin-bottom: 28px;
+  color: #333;
+  line-height: 1.6;
+}
+
+.signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field label {
+  font-size: 0.9rem;
+  color: #555;
+  letter-spacing: 0.03em;
+}
+
+.form-field input {
+  font-family: 'Antic Slab', serif;
+  font-size: 1rem;
+  padding: 10px 14px;
+  border: 1.5px solid #c9b8a8;
+  border-radius: 4px;
+  background: #fff;
+  color: #1a1a1a;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-field input:focus {
+  border-color: #8b1a1a;
+}
+
+.submit-btn {
+  margin-top: 8px;
+  align-self: flex-start;
+  font-family: 'Antic Slab', serif;
+  font-size: 1rem;
+  padding: 11px 36px;
+  background-color: #8b1a1a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.submit-btn:hover {
+  background-color: #6e1414;
+}
+
+/* ── Divider ─────────────────────────────────────── */
+.divider {
+  border: none;
+  border-top: 1.5px solid #d6c8bb;
+  margin: 48px 0;
+}
