@@ -34,8 +34,6 @@ export default function StudentPersonalInfo({
                 </div>
             </section>
 
-            <hr className="divider" />
-
             <section className="form-section">
                 <h2 className="section-title">Sign Up</h2>
                 <p className="form-prompt">
@@ -44,44 +42,54 @@ export default function StudentPersonalInfo({
                 </p>
                 <form className="signup-form" onSubmit={handleSubmit}>
                     <div className="form-field">
-                        <label htmlFor="name">Full Name</label>
+                        <label htmlFor="name">Full Name <span className="required">*</span></label>
                         <input
                             id="name"
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g. Jane Smith"
+                            placeholder="Please enter your full name"
+                            required
                         />
                     </div>
                     <div className="form-field">
-                        <label htmlFor="studentId">Student ID</label>
+                        <label htmlFor="studentId">Student ID <span className="required">*</span></label>
                         <input
                             id="studentId"
                             type="text"
                             value={studentId}
                             onChange={(e) => setStudentId(e.target.value)}
                             placeholder="1000XXXXX"
+                            required
                         />
                     </div>
                     <div className="form-field">
-                        <label htmlFor="email">Email</label>
+                        <label htmlFor="email">Email (preferred email) <span className="required">*</span></label>
                         <input
                             id="email"
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="e.g. jsmith@mvla.net"
+                            placeholder="1000XXXX@mvla.net"
+                            required
                         />
                     </div>
                     <div className="form-field">
-                        <label htmlFor="grade">Grade</label>
-                        <input
-                            id="grade"
-                            type="text"
-                            value={grade}
-                            onChange={(e) => setGrade(e.target.value)}
-                            placeholder="e.g. 11"
-                        />
+                        <span className="form-field-label">Grade <span className="required">*</span></span>
+                        <div className="grade-options">
+                            {["9th", "10th", "11th", "12th"].map((g) => (
+                                <label key={g} className="grade-radio">
+                                    <input
+                                        type="radio"
+                                        name="grade"
+                                        value={g}
+                                        checked={grade === g}
+                                        onChange={(e) => setGrade(e.target.value)}
+                                    />
+                                    {g}
+                                </label>
+                            ))}
+                        </div>
                     </div>
                     <button type="submit" className="submit-btn">
                         Register

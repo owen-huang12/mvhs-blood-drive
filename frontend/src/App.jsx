@@ -1,9 +1,12 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import "./index.css";
+import HomePage from "./HomePage.jsx";
 import StudentPersonalInfo from "./StudentPersonalInfo.jsx";
+import CoordinatorsPage from "./CoordinatorsPage.jsx";
 import icon from "./assets/icon.png";
 
-function App() {
+function Layout() {
     const [name, setName] = useState("");
     const [studentId, setStudentId] = useState("");
     const [email, setEmail] = useState("");
@@ -14,33 +17,37 @@ function App() {
     };
 
     const formProps = {
-        name,
-        setName,
-        studentId,
-        setStudentId,
-        email,
-        setEmail,
-        grade,
-        setGrade,
+        name, setName,
+        studentId, setStudentId,
+        email, setEmail,
+        grade, setGrade,
         handleSubmit,
     };
 
     return (
         <>
             <header className="header">
-                <span className="header-title">
-                    Mountain View High School Stanford Blood Drive
-                </span>
-                <img
-                    src={icon}
-                    alt="MVHS Blood Drive"
-                    className="header-icon"
-                />
+                <Link to="/" className="header-brand">
+                    <img src={icon} alt="MVHS Blood Drive" className="header-icon" />
+                    <span className="header-title">
+                        Mountain View High School<br />Stanford Blood Drive
+                    </span>
+                </Link>
             </header>
 
-            <StudentPersonalInfo {...formProps} />
+            <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/signup" element={<StudentPersonalInfo {...formProps} />} />
+                <Route path="/coordinators" element={<CoordinatorsPage />} />
+            </Routes>
         </>
     );
 }
 
-export default App;
+export default function App() {
+    return (
+        <BrowserRouter>
+            <Layout />
+        </BrowserRouter>
+    );
+}
