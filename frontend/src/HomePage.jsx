@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
+import placeholder1 from "./assets/placeholder_1.png";
+import placeholder2 from "./assets/placeholder_2.png";
 
 export default function HomePage() {
     return (
         <div className="homepage">
             <div className="left-panel">
-                <div className="photo-placeholder" />
-                <div className="photo-placeholder" />
+                <img src={placeholder1} alt="" className="photo-placeholder" />
+                <img src={placeholder2} alt="" className="photo-placeholder" />
                 <Link to="/signup" className="signup-cta">
                     <span className="cta-arrow">&#8594;</span>
                     <span>Sign up for the<br />8/12 blood drive</span>

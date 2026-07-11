@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+
 import "./index.css";
 import HomePage from "./HomePage.jsx";
 import StudentPersonalInfo from "./StudentPersonalInfo.jsx";
 import CoordinatorsPage from "./CoordinatorsPage.jsx";
+import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
+import RequireAuth from "./RequireAuth.jsx";
 import icon from "./assets/icon.png";
 
 function Layout() {
@@ -38,7 +41,6 @@ function Layout() {
             <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/signup" element={<StudentPersonalInfo {...formProps} />} />
-                <Route path="/coordinators" element={<CoordinatorsPage />} />
             </Routes>
         </>
     );
@@ -47,7 +49,18 @@ function Layout() {
 export default function App() {
     return (
         <BrowserRouter>
-            <Layout />
+            <Routes>
+                <Route path="/coordinators" element={<CoordinatorsPage />} />
+                <Route
+                    path="/coordinators/dashboard"
+                    element={
+                        <RequireAuth>
+                            <CoordinatorDashboard />
+                        </RequireAuth>
+                    }
+                />
+                <Route path="/*" element={<Layout />} />
+            </Routes>
         </BrowserRouter>
     );
 }

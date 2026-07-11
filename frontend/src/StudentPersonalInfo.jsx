@@ -35,14 +35,18 @@ export default function StudentPersonalInfo({
             </section>
 
             <section className="form-section">
-                <h2 className="section-title">Sign Up</h2>
+                <h2 className="section-title">
+                    Personal & Contact information
+                </h2>
                 <p className="form-prompt">
                     Please fill out the form below with your information to
                     register for the blood drive. All fields are required.
                 </p>
                 <form className="signup-form" onSubmit={handleSubmit}>
                     <div className="form-field">
-                        <label htmlFor="name">Full Name <span className="required">*</span></label>
+                        <label htmlFor="name">
+                            Full Name <span className="required">*</span>
+                        </label>
                         <input
                             id="name"
                             type="text"
@@ -53,7 +57,9 @@ export default function StudentPersonalInfo({
                         />
                     </div>
                     <div className="form-field">
-                        <label htmlFor="studentId">Student ID <span className="required">*</span></label>
+                        <label htmlFor="studentId">
+                            Student ID <span className="required">*</span>
+                        </label>
                         <input
                             id="studentId"
                             type="text"
@@ -64,7 +70,10 @@ export default function StudentPersonalInfo({
                         />
                     </div>
                     <div className="form-field">
-                        <label htmlFor="email">Email (preferred email) <span className="required">*</span></label>
+                        <label htmlFor="email">
+                            Email (preferred email){" "}
+                            <span className="required">*</span>
+                        </label>
                         <input
                             id="email"
                             type="email"
@@ -75,7 +84,9 @@ export default function StudentPersonalInfo({
                         />
                     </div>
                     <div className="form-field">
-                        <span className="form-field-label">Grade <span className="required">*</span></span>
+                        <span className="form-field-label">
+                            Grade <span className="required">*</span>
+                        </span>
                         <div className="grade-options">
                             {["9th", "10th", "11th", "12th"].map((g) => (
                                 <label key={g} className="grade-radio">
@@ -84,13 +95,27 @@ export default function StudentPersonalInfo({
                                         name="grade"
                                         value={g}
                                         checked={grade === g}
-                                        onChange={(e) => setGrade(e.target.value)}
+                                        onChange={(e) =>
+                                            setGrade(e.target.value)
+                                        }
                                     />
                                     {g}
                                 </label>
                             ))}
                         </div>
                     </div>
+                    <h2 className="section-title">Preferred time slot</h2>
+                    <p>
+                        Please choose 3 of your preferred time slots during
+                        schedule{" "}
+                        {/*figure out the schedule day and stuff and what day it is*/}
+                    </p>
+
+                    <p>
+                        here there is going to be a time slotting window which
+                        they can select their period choices
+                    </p>
+
                     <button type="submit" className="submit-btn">
                         Register
                     </button>
