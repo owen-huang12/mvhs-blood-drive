@@ -1,14 +1,15 @@
 import { Link } from "react-router-dom";
+import CollapsibleSection from "./CollapsibleSection.jsx";
+import HomeHero from "./HomeHero.jsx";
 import placeholder1 from "./assets/placeholder_1.png";
 import placeholder2 from "./assets/placeholder_2.png";
 
 export default function HomePage() {
     return (
         <main className="home-page">
-            <section>
-                <h2 className="section-title">
-                    Why should I donate to the MVHS annual Stanford blood drive?
-                </h2>
+            <HomeHero />
+
+            <CollapsibleSection title="Why should I donate to the MVHS annual Stanford blood drive?">
                 <div className="overview-text">
                     <p>
                         Lorem ipsum dolor sit amet consectetur adipiscing elit.
@@ -29,12 +30,9 @@ export default function HomePage() {
                     <img src={placeholder1} alt="" className="photo-placeholder" />
                     <img src={placeholder2} alt="" className="photo-placeholder" />
                 </div>
-            </section>
+            </CollapsibleSection>
 
-            <section className="form-section">
-                <h2 className="section-title">
-                    Am I eligible to donate to the Stanford Blood Drive?
-                </h2>
+            <CollapsibleSection title="Am I eligible to donate to the Stanford Blood Drive?">
                 <div className="overview-text">
                     <p>
                         Lorem ipsum dolor sit amet consectetur adipiscing elit.
@@ -45,7 +43,7 @@ export default function HomePage() {
                         lacinia integer nunc posuere.
                     </p>
                 </div>
-            </section>
+            </CollapsibleSection>
 
             <Link to="/signup" className="signup-cta">
                 <span className="cta-arrow">&#8594;</span>

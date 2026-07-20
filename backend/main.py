@@ -75,6 +75,19 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+class StudentSignUp(BaseModel):
+    id: int
+    full_name: str
+    is_student: bool
+    age: int
+    timestamp: datetime
+    email_address: str
+    confirmed: bool
+    time_slot: datetime
+    first_choice: str
+    second_choice: str
+    third_choice: str
+
 
 # routes
 
@@ -151,3 +164,16 @@ def update_coordinator(coordinator: CoordinatorCreate):
     cur.close()
     conn.close()
     return CoordinatorPublic(full_name=coordinator.full_name, email=coordinator.email)
+
+
+@app.post('/student-sign-up')
+def create_student_sign_up(sign_up: StudentSignUp):
+    conn = get.conn()
+    curr = conn.get_cursor()
+    curr.execute(
+        """
+        INSERT INTO sign_ups (id, full_name, is_student, age, timestamp, email_address, confirmed, time_slot, first_choice, second_choice, third_choice)
+        VALUES (%i, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        () # add the values hereadd some more space at the bottom of the page so that when you scroll down all of the way you can still see the text of the last sectino
+    )

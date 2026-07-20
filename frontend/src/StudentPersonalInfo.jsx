@@ -1,4 +1,5 @@
 import { useState } from "react";
+import CollapsibleSection from "./CollapsibleSection.jsx";
 
 const TIME_SLOTS = [
     { period: "Period 2", time: "8:30 AM" },
@@ -67,10 +68,7 @@ export default function StudentPersonalInfo({
     };
     return (
         <main className="page">
-            <section>
-                <h2 className="section-title">
-                    Overview of the Stanford Blood Drive
-                </h2>
+            <CollapsibleSection title="Overview of the Stanford Blood Drive">
                 <div className="overview-text">
                     <p>
                         Lorem ipsum dolor sit amet consectetur adipiscing elit.
@@ -88,136 +86,141 @@ export default function StudentPersonalInfo({
                         Tempus leo eu aenean sed diam urna tempor.
                     </p>
                 </div>
-            </section>
+            </CollapsibleSection>
 
             <section className="form-section">
-                <h2 className="section-title">
-                    Personal & Contact information
-                </h2>
-                <p className="form-prompt">
-                    Please fill out the form below with your information to
-                    register for the blood drive. All fields are required.
-                </p>
                 <form className="signup-form" onSubmit={handleFormSubmit}>
-                    <div className="form-field">
-                        <label htmlFor="name">
-                            Full Name <span className="required">*</span>
-                        </label>
-                        <input
-                            id="name"
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Please enter your full name"
-                            required
-                        />
-                    </div>
-                    <div className="form-field">
-                        <label htmlFor="studentId">
-                            Student ID <span className="required">*</span>
-                        </label>
-                        <input
-                            id="studentId"
-                            type="text"
-                            value={studentId}
-                            onChange={(e) => setStudentId(e.target.value)}
-                            placeholder=""
-                            required
-                        />
-                    </div>
-                    <div className="form-field">
-                        <label htmlFor="email">
-                            Email (preferred email){" "}
-                            <span className="required">*</span>
-                        </label>
-                        <input
-                            id="email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder=""
-                            required
-                        />
-                    </div>
-                    <div className="form-field">
-                        <span className="form-field-label">
-                            Grade <span className="required">*</span>
-                        </span>
-                        <div className="grade-options">
-                            {["9th", "10th", "11th", "12th"].map((g) => (
-                                <label key={g} className="grade-radio">
-                                    <input
-                                        type="radio"
-                                        name="grade"
-                                        value={g}
-                                        checked={grade === g}
-                                        onChange={(e) =>
-                                            setGrade(e.target.value)
-                                        }
-                                    />
-                                    {g}
-                                </label>
-                            ))}
+                    <CollapsibleSection
+                        as="div"
+                        title="Personal & Contact information"
+                    >
+                        <p className="form-prompt">
+                            Please fill out the form below with your
+                            information to register for the blood drive. All
+                            fields are required.
+                        </p>
+                        <div className="form-field">
+                            <label htmlFor="name">
+                                Full Name <span className="required">*</span>
+                            </label>
+                            <input
+                                id="name"
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Please enter your full name"
+                                required
+                            />
                         </div>
-                    </div>
-                    <h2 className="section-title">Preferred time slot</h2>
-                    <p className="form-prompt">
-                        Please select exactly 3 of your preferred time slots,
-                        in order of preference. The order you click them in
-                        sets your 1st, 2nd, and 3rd choice.
-                        {/*figure out the schedule day and stuff and what day it is*/}
-                    </p>
-
-                    <table className="signups-table timeslot-table">
-                        <thead>
-                            <tr>
-                                <th>Period</th>
-                                <th>Time slot</th>
-                                <th>Your choice</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {TIME_SLOTS.map((slot) => {
-                                const slotKey = `${slot.period}__${slot.time}`;
-                                const rank = selectedSlots.indexOf(slotKey);
-                                const isSelected = rank !== -1;
-                                return (
-                                    <tr
-                                        key={slotKey}
-                                        className={
-                                            isSelected
-                                                ? "timeslot-row selected"
-                                                : "timeslot-row"
-                                        }
-                                        tabIndex={0}
-                                        onClick={() => toggleTimeSlot(slotKey)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                toggleTimeSlot(slotKey);
+                        <div className="form-field">
+                            <label htmlFor="studentId">
+                                Student ID <span className="required">*</span>
+                            </label>
+                            <input
+                                id="studentId"
+                                type="text"
+                                value={studentId}
+                                onChange={(e) => setStudentId(e.target.value)}
+                                placeholder=""
+                                required
+                            />
+                        </div>
+                        <div className="form-field">
+                            <label htmlFor="email">
+                                Email (preferred email){" "}
+                                <span className="required">*</span>
+                            </label>
+                            <input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder=""
+                                required
+                            />
+                        </div>
+                        <div className="form-field">
+                            <span className="form-field-label">
+                                Grade <span className="required">*</span>
+                            </span>
+                            <div className="grade-options">
+                                {["9th", "10th", "11th", "12th"].map((g) => (
+                                    <label key={g} className="grade-radio">
+                                        <input
+                                            type="radio"
+                                            name="grade"
+                                            value={g}
+                                            checked={grade === g}
+                                            onChange={(e) =>
+                                                setGrade(e.target.value)
                                             }
-                                        }}
-                                    >
-                                        <td
-                                            style={{
-                                                backgroundColor:
-                                                    PERIOD_COLORS[slot.period],
-                                                color: "#fff",
+                                        />
+                                        {g}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    </CollapsibleSection>
+
+                    <CollapsibleSection as="div" title="Preferred time slot">
+                        <p className="form-prompt">
+                            Please select exactly 3 of your preferred time
+                            slots, in order of preference. The order you click
+                            them in sets your 1st, 2nd, and 3rd choice.
+                            {/*figure out the schedule day and stuff and what day it is*/}
+                        </p>
+
+                        <table className="signups-table timeslot-table">
+                            <thead>
+                                <tr>
+                                    <th>Period</th>
+                                    <th>Time slot</th>
+                                    <th>Your choice</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {TIME_SLOTS.map((slot) => {
+                                    const slotKey = `${slot.period}__${slot.time}`;
+                                    const rank = selectedSlots.indexOf(slotKey);
+                                    const isSelected = rank !== -1;
+                                    return (
+                                        <tr
+                                            key={slotKey}
+                                            className={
+                                                isSelected
+                                                    ? "timeslot-row selected"
+                                                    : "timeslot-row"
+                                            }
+                                            tabIndex={0}
+                                            onClick={() => toggleTimeSlot(slotKey)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter" || e.key === " ") {
+                                                    e.preventDefault();
+                                                    toggleTimeSlot(slotKey);
+                                                }
                                             }}
                                         >
-                                            {slot.period}
-                                        </td>
-                                        <td>{slot.time}</td>
-                                        <td className="timeslot-choice">
-                                            {isSelected ? CHOICE_LABELS[rank] : ""}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                            <td
+                                                style={{
+                                                    backgroundColor:
+                                                        PERIOD_COLORS[slot.period],
+                                                    color: "#fff",
+                                                }}
+                                            >
+                                                {slot.period}
+                                            </td>
+                                            <td>{slot.time}</td>
+                                            <td className="timeslot-choice">
+                                                {isSelected ? CHOICE_LABELS[rank] : ""}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
 
-                    {slotError && <p className="login-error">{slotError}</p>}
+                        {slotError && <p className="login-error">{slotError}</p>}
+                    </CollapsibleSection>
 
                     <button type="submit" className="submit-btn">
                         Register
