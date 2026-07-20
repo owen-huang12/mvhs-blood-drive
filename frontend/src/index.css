@@ -17,13 +17,17 @@
   --coral:     #F06056;
   --alabaster: #EDE9E9;
   --red:       #c0392b;
+  --slate:     #5B7C99;
 }
 
 html, body { overscroll-behavior: none; scrollbar-width: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
 
+:focus-visible { outline: 2px solid var(--slate); outline-offset: 2px; }
+
 body {
-  font-family: 'Antic Slab', serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-weight: 300;
   background-color: var(--coral-bg);
   color: #1a1a1a;
   min-height: 100vh;
@@ -43,7 +47,7 @@ body {
 
 .header-brand { display: flex; align-items: center; gap: 16px; text-decoration: none; }
 .header-icon  { height: 52px; }
-.header-title { color: #EDE9E9; font-weight: bold; font-style: italic; font-size: 1.1rem; letter-spacing: 0.02em; line-height: 1.4; }
+.header-title { font-family: 'Antic Slab', serif; color: #EDE9E9; font-weight: bold; font-style: italic; font-size: 1.1rem; letter-spacing: 0.02em; line-height: 1.4; }
 
 .photo-stack {
   display: flex;
@@ -69,7 +73,7 @@ body {
   padding: 10px 20px 10px 10px;
   text-decoration: none;
   color: #fff;
-  font-family: 'Antic Slab', serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 1rem;
   width: fit-content;
   line-height: 1.4;
@@ -178,7 +182,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 1.05rem;
   color: #1a1a1a;
   cursor: pointer;
@@ -190,7 +194,7 @@ body {
 
 .form-field input,
 .form-field select {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 1.05rem;
   padding: 12px 20px;
   border: 1.5px solid #c9b8a8;
@@ -202,12 +206,12 @@ body {
 }
 
 .form-field input:focus,
-.form-field select:focus { border-color: var(--coral); }
+.form-field select:focus { border-color: var(--slate); }
 
 .submit-btn {
   margin-top: 8px;
   align-self: flex-start;
-  font-family: 'Antic Slab', serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 1rem;
   padding: 11px 36px;
   background-color: var(--blush);
@@ -235,9 +239,9 @@ body {
 
 .login-icon { height: 52px; }
 
-.login-brand-text { font-family: 'Antic Slab', serif; font-size: 1.15rem; color: #1a1a1a; line-height: 1.4; }
+.login-brand-text { font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif; font-size: 1.15rem; color: #1a1a1a; line-height: 1.4; }
 
-.login-heading { font-family: 'Antic Slab', serif; font-size: 1.6rem; color: #1a1a1a; margin-bottom: 28px; }
+.login-heading { font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif; font-size: 1.6rem; color: #1a1a1a; margin-bottom: 28px; }
 
 .login-form { display: flex; flex-direction: column; gap: 18px; }
 
@@ -247,7 +251,7 @@ body {
   background: none;
   border: none;
   color: var(--coral);
-  font-family: 'Antic Slab', serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 0.9rem;
   cursor: pointer;
   padding: 0;
@@ -272,7 +276,7 @@ body {
   border-radius: 50px;
   padding: 6px 16px 6px 6px;
   cursor: pointer;
-  font-family: 'Antic Slab', serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   color: #fff;
   font-size: 0.9rem;
 }
@@ -314,7 +318,7 @@ body {
 .signups-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 1rem;
   margin-top: 16px;
 }
@@ -324,7 +328,7 @@ body {
   color: #fff;
   padding: 12px 16px;
   text-align: left;
-  font-family: 'Antic Slab', serif;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 0.9rem;
   letter-spacing: 0.04em;
 }
@@ -336,3 +340,16 @@ body {
 .signups-table tr:hover td { background-color: #faf6f3; }
 
 .empty-state { text-align: center; color: #999; padding: 32px 0; font-style: italic; }
+
+/* Preferred time slot picker */
+.timeslot-table { margin-top: 8px; margin-bottom: 8px; }
+
+.timeslot-row { cursor: pointer; user-select: none; }
+
+.timeslot-row:focus { outline: 2px solid var(--slate); outline-offset: -2px; }
+
+.timeslot-row.selected td { background-color: rgba(91, 124, 153, 0.16); }
+
+.timeslot-row.selected:hover td { background-color: rgba(91, 124, 153, 0.24); }
+
+.timeslot-choice { color: var(--slate); font-weight: 700; white-space: nowrap; }

@@ -1,3 +1,46 @@
+import { useState } from "react";
+
+const TIME_SLOTS = [
+    { period: "Period 2", time: "8:30 AM" },
+    { period: "Period 2", time: "8:45 AM" },
+    { period: "Period 2", time: "9:00 AM" },
+    { period: "Period 2", time: "9:15 AM" },
+    { period: "Period 2", time: "9:30 AM" },
+    { period: "Period 2", time: "9:45 AM" },
+    { period: "Period 2/Tutorial", time: "10:00 AM" },
+    { period: "Tutorial", time: "10:15 AM" },
+    { period: "Tutorial", time: "10:30 AM" },
+    { period: "Tutorial", time: "10:45 AM" },
+    { period: "Brunch/Period 4", time: "11:00 AM" },
+    { period: "Period 4", time: "11:15 AM" },
+    { period: "Period 4", time: "11:30 AM" },
+    { period: "Period 4", time: "11:45 AM" },
+    { period: "Period 4", time: "12:00 PM" },
+    { period: "Period 4", time: "12:15 PM" },
+    { period: "Period 4/Lunch", time: "12:30 PM" },
+    { period: "Lunch", time: "12:45 PM" },
+    { period: "Lunch", time: "1:00 PM" },
+    { period: "Lunch/Period 6", time: "1:15 PM" },
+    { period: "Period 6", time: "1:30 PM" },
+    { period: "Period 6", time: "1:45 PM" },
+    { period: "Period 6", time: "2:00 PM" },
+    { period: "Period 6", time: "2:15 PM" },
+];
+
+const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
+
+const PERIOD_COLORS = {
+    "Period 2": "#E28277",
+    "Period 2/Tutorial": "#D6746A",
+    "Tutorial": "#CA675E",
+    "Brunch/Period 4": "#BE5B51",
+    "Period 4": "#B14F45",
+    "Period 4/Lunch": "#A5443B",
+    "Lunch": "#983A31",
+    "Lunch/Period 6": "#8B3129",
+    "Period 6": "#7E2A22",
+};
+
 export default function StudentPersonalInfo({
     name,
     setName,
@@ -7,8 +50,21 @@ export default function StudentPersonalInfo({
     setEmail,
     grade,
     setGrade,
+    selectedSlots,
+    toggleTimeSlot,
     handleSubmit,
 }) {
+    const [slotError, setSlotError] = useState("");
+
+    const handleFormSubmit = (event) => {
+        if (selectedSlots.length !== 3) {
+            event.preventDefault();
+            setSlotError("Please select exactly 3 preferred time slots.");
+            return;
+        }
+        setSlotError("");
+        handleSubmit(event);
+    };
     return (
         <main className="page">
             <section>
@@ -42,7 +98,7 @@ export default function StudentPersonalInfo({
                     Please fill out the form below with your information to
                     register for the blood drive. All fields are required.
                 </p>
-                <form className="signup-form" onSubmit={handleSubmit}>
+                <form className="signup-form" onSubmit={handleFormSubmit}>
                     <div className="form-field">
                         <label htmlFor="name">
                             Full Name <span className="required">*</span>
@@ -65,7 +121,7 @@ export default function StudentPersonalInfo({
                             type="text"
                             value={studentId}
                             onChange={(e) => setStudentId(e.target.value)}
-                            placeholder="1000XXXXX"
+                            placeholder=""
                             required
                         />
                     </div>
@@ -79,7 +135,7 @@ export default function StudentPersonalInfo({
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="1000XXXX@mvla.net"
+                            placeholder=""
                             required
                         />
                     </div>
@@ -105,16 +161,63 @@ export default function StudentPersonalInfo({
                         </div>
                     </div>
                     <h2 className="section-title">Preferred time slot</h2>
-                    <p>
-                        Please choose 3 of your preferred time slots during
-                        schedule{" "}
+                    <p className="form-prompt">
+                        Please select exactly 3 of your preferred time slots,
+                        in order of preference. The order you click them in
+                        sets your 1st, 2nd, and 3rd choice.
                         {/*figure out the schedule day and stuff and what day it is*/}
                     </p>
 
-                    <p>
-                        here there is going to be a time slotting window which
-                        they can select their period choices
-                    </p>
+                    <table className="signups-table timeslot-table">
+                        <thead>
+                            <tr>
+                                <th>Period</th>
+                                <th>Time slot</th>
+                                <th>Your choice</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {TIME_SLOTS.map((slot) => {
+                                const slotKey = `${slot.period}__${slot.time}`;
+                                const rank = selectedSlots.indexOf(slotKey);
+                                const isSelected = rank !== -1;
+                                return (
+                                    <tr
+                                        key={slotKey}
+                                        className={
+                                            isSelected
+                                                ? "timeslot-row selected"
+                                                : "timeslot-row"
+                                        }
+                                        tabIndex={0}
+                                        onClick={() => toggleTimeSlot(slotKey)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" || e.key === " ") {
+                                                e.preventDefault();
+                                                toggleTimeSlot(slotKey);
+                                            }
+                                        }}
+                                    >
+                                        <td
+                                            style={{
+                                                backgroundColor:
+                                                    PERIOD_COLORS[slot.period],
+                                                color: "#fff",
+                                            }}
+                                        >
+                                            {slot.period}
+                                        </td>
+                                        <td>{slot.time}</td>
+                                        <td className="timeslot-choice">
+                                            {isSelected ? CHOICE_LABELS[rank] : ""}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+
+                    {slotError && <p className="login-error">{slotError}</p>}
 
                     <button type="submit" className="submit-btn">
                         Register

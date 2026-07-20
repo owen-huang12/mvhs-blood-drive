@@ -14,6 +14,19 @@ function Layout() {
     const [studentId, setStudentId] = useState("");
     const [email, setEmail] = useState("");
     const [grade, setGrade] = useState("");
+    const [selectedSlots, setSelectedSlots] = useState([]);
+
+    const toggleTimeSlot = (slotKey) => {
+        setSelectedSlots((prev) => {
+            if (prev.includes(slotKey)) {
+                return prev.filter((key) => key !== slotKey);
+            }
+            if (prev.length >= 3) {
+                return prev;
+            }
+            return [...prev, slotKey];
+        });
+    };
 
     const handleSubmit = (event) => {
         event.preventDefault();
@@ -24,6 +37,7 @@ function Layout() {
         studentId, setStudentId,
         email, setEmail,
         grade, setGrade,
+        selectedSlots, toggleTimeSlot,
         handleSubmit,
     };
 
