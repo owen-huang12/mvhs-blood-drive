@@ -38,7 +38,7 @@ export default function CoordinatorDashboard() {
                 <div className="header-brand">
                     <img src={icon} alt="MVHS Blood Drive" className="header-icon" />
                     <span className="header-title">
-                        Mountain View High School<br />Stanford Blood Drive
+                        MVHS<br />Stanford Blood Drive
                     </span>
                 </div>
             </header>

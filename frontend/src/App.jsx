@@ -33,7 +33,7 @@ function Layout() {
                 <Link to="/" className="header-brand">
                     <img src={icon} alt="MVHS Blood Drive" className="header-icon" />
                     <span className="header-title">
-                        Mountain View High School<br />Stanford Blood Drive
+                        MVHS<br />Stanford Blood Drive
                     </span>
                 </Link>
             </header>

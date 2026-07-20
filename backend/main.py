@@ -14,7 +14,6 @@ load_dotenv()
 
 DATABASE_URL = os.environ["NEON_DATABASE"]
 JWT_SECRET = os.environ["JWT_SECRET"]
-ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 12
 
 app = FastAPI()
@@ -45,12 +44,12 @@ def get_conn():
 def create_access_token(data: dict) -> str:
     payload = data.copy()
     payload["exp"] = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    return jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
 def get_current_coordinator(token: str = Depends(oauth2_scheme)):
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         email: str = payload.get("sub")
         if email is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -90,7 +89,7 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
     cur = conn.cursor()
     cur.execute(
         "SELECT password_hash FROM coordinators WHERE email = %s",
-        (form.username,)
+        (form.username)
     )
     row = cur.fetchone()
     cur.close()
