@@ -31,15 +31,15 @@ const TIME_SLOTS = [
 const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
 
 const PERIOD_COLORS = {
-    "Period 2": "#E28277",
-    "Period 2/Tutorial": "#D6746A",
-    "Tutorial": "#CA675E",
-    "Brunch/Period 4": "#BE5B51",
-    "Period 4": "#B14F45",
-    "Period 4/Lunch": "#A5443B",
-    "Lunch": "#983A31",
-    "Lunch/Period 6": "#8B3129",
-    "Period 6": "#7E2A22",
+    "Period 2": { bg: "#FBE7E4", text: "#A85449" },
+    "Period 2/Tutorial": { bg: "#FBEDE0", text: "#A16B3C" },
+    "Tutorial": { bg: "#FAF3DD", text: "#8E7530" },
+    "Brunch/Period 4": { bg: "#EAF3E3", text: "#5E8148" },
+    "Period 4": { bg: "#E0F0EB", text: "#3F7F70" },
+    "Period 4/Lunch": { bg: "#DFEEF5", text: "#3E7793" },
+    "Lunch": { bg: "#E3E9F8", text: "#4C64A5" },
+    "Lunch/Period 6": { bg: "#E9E4F6", text: "#68569F" },
+    "Period 6": { bg: "#F3E4EF", text: "#8F5182" },
 };
 
 export default function StudentPersonalInfo({
@@ -47,6 +47,8 @@ export default function StudentPersonalInfo({
     setName,
     studentId,
     setStudentId,
+    age,
+    setAge,
     email,
     setEmail,
     grade,
@@ -128,6 +130,20 @@ export default function StudentPersonalInfo({
                             />
                         </div>
                         <div className="form-field">
+                            <label htmlFor="age">
+                                Age <span className="required">*</span>
+                            </label>
+                            <input
+                                id="age"
+                                type="number"
+                                min="1"
+                                value={age}
+                                onChange={(e) => setAge(e.target.value)}
+                                placeholder=""
+                                required
+                            />
+                        </div>
+                        <div className="form-field">
                             <label htmlFor="email">
                                 Email (preferred email){" "}
                                 <span className="required">*</span>
@@ -172,12 +188,12 @@ export default function StudentPersonalInfo({
                             {/*figure out the schedule day and stuff and what day it is*/}
                         </p>
 
-                        <table className="signups-table timeslot-table">
+                        <table className="timeslot-table">
                             <thead>
                                 <tr>
                                     <th>Period</th>
                                     <th>Time slot</th>
-                                    <th>Your choice</th>
+                                    <th className="timeslot-choice-col">Your choice</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -185,6 +201,7 @@ export default function StudentPersonalInfo({
                                     const slotKey = `${slot.period}__${slot.time}`;
                                     const rank = selectedSlots.indexOf(slotKey);
                                     const isSelected = rank !== -1;
+                                    const colors = PERIOD_COLORS[slot.period];
                                     return (
                                         <tr
                                             key={slotKey}
@@ -193,6 +210,8 @@ export default function StudentPersonalInfo({
                                                     ? "timeslot-row selected"
                                                     : "timeslot-row"
                                             }
+                                            role="button"
+                                            aria-pressed={isSelected}
                                             tabIndex={0}
                                             onClick={() => toggleTimeSlot(slotKey)}
                                             onKeyDown={(e) => {
@@ -202,18 +221,24 @@ export default function StudentPersonalInfo({
                                                 }
                                             }}
                                         >
-                                            <td
-                                                style={{
-                                                    backgroundColor:
-                                                        PERIOD_COLORS[slot.period],
-                                                    color: "#fff",
-                                                }}
-                                            >
-                                                {slot.period}
+                                            <td>
+                                                <span
+                                                    className="timeslot-period"
+                                                    style={{
+                                                        backgroundColor: colors.bg,
+                                                        color: colors.text,
+                                                    }}
+                                                >
+                                                    {slot.period}
+                                                </span>
                                             </td>
-                                            <td>{slot.time}</td>
-                                            <td className="timeslot-choice">
-                                                {isSelected ? CHOICE_LABELS[rank] : ""}
+                                            <td className="timeslot-time">{slot.time}</td>
+                                            <td className="timeslot-choice-col">
+                                                {isSelected && (
+                                                    <span className="timeslot-rank">
+                                                        {CHOICE_LABELS[rank]}
+                                                    </span>
+                                                )}
                                             </td>
                                         </tr>
                                     );

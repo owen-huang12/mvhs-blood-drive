@@ -12,6 +12,7 @@ import icon from "./assets/icon.png";
 function Layout() {
     const [name, setName] = useState("");
     const [studentId, setStudentId] = useState("");
+    const [age, setAge] = useState("");
     const [email, setEmail] = useState("");
     const [grade, setGrade] = useState("");
     const [selectedSlots, setSelectedSlots] = useState([]);
@@ -47,6 +48,7 @@ function Layout() {
                 body: JSON.stringify({
                     full_name: name,
                     student_id: studentId,
+                    age: Number(age),
                     email_address: email,
                     grade,
                     first_choice,
@@ -71,6 +73,7 @@ function Layout() {
     const formProps = {
         name, setName,
         studentId, setStudentId,
+        age, setAge,
         email, setEmail,
         grade, setGrade,
         selectedSlots, toggleTimeSlot,

@@ -149,7 +149,7 @@ body {
 
 .collapsible-content { overflow: hidden; }
 
-.collapsible-inner { padding-top: 20px; }
+.collapsible-inner { padding-top: 20px; padding-bottom: 24px; }
 
 /* Page layout */
 .page {
@@ -217,62 +217,99 @@ body {
 /* Form */
 .form-section { margin-top: 52px; }
 
-.form-prompt { font-size: 1.1rem; margin-bottom: 28px; color: #333; line-height: 1.6; }
+.form-prompt { font-size: 1rem; margin-bottom: 26px; color: #5f5a56; line-height: 1.65; }
 
-.signup-form { display: flex; flex-direction: column; gap: 18px; }
+.signup-form { display: flex; flex-direction: column; gap: 26px; }
 
-.form-field { display: flex; flex-direction: column; gap: 6px; }
+.form-field { display: flex; flex-direction: column; gap: 9px; margin-bottom: 24px; }
+
+.form-field:last-child { margin-bottom: 0; }
 
 .form-field label,
-.form-field-label { font-size: 0.9rem; color: #333; letter-spacing: 0.03em; }
+.form-field-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #6b6b6b;
+  letter-spacing: 0.02em;
+}
 
-.grade-options { display: flex; flex-direction: column; gap: 8px; }
+.grade-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 
 .grade-radio {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   color: #1a1a1a;
   cursor: pointer;
+  padding: 10px 18px;
+  background: #fff;
+  border: 1px solid #e4e0dd;
+  border-radius: 12px;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
-.grade-radio input[type="radio"] { accent-color: var(--blush); width: 15px; height: 15px; cursor: pointer; }
+.grade-radio:hover { border-color: #cfc9c4; }
 
-.required { color: var(--red); }
+.grade-radio:has(input:checked) {
+  border-color: var(--slate);
+  background-color: #eaf5fc;
+}
+
+.grade-radio input[type="radio"] { accent-color: var(--slate); width: 15px; height: 15px; cursor: pointer; }
+
+.required { color: var(--coral); }
 
 .form-field input,
 .form-field select {
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 1.05rem;
-  padding: 12px 20px;
-  border: 1.5px solid #c9b8a8;
-  border-radius: 50px;
+  font-size: 1rem;
+  padding: 13px 16px;
+  border: 1px solid #e4e0dd;
+  border-radius: 12px;
   background: #fff;
   color: #1a1a1a;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
+.form-field input::placeholder { color: #b3aca7; }
+
+.form-field input:hover,
+.form-field select:hover { border-color: #cfc9c4; }
+
 .form-field input:focus,
-.form-field select:focus { border-color: var(--slate); }
+.form-field select:focus {
+  border-color: var(--coral);
+  box-shadow: 0 0 0 3px rgba(240, 96, 86, 0.12);
+}
 
 .submit-btn {
   margin-top: 8px;
   align-self: flex-start;
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 1rem;
-  padding: 11px 36px;
-  background-color: var(--blush);
+  padding: 13px 40px;
+  background-color: var(--coral);
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-.submit-btn:hover { background-color: var(--coral); }
+.submit-btn:hover:not(:disabled) {
+  background-color: #e2544b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(240, 96, 86, 0.25);
+}
+
+.submit-btn:disabled { opacity: 0.6; cursor: default; }
 
 /* Login page */
 .login-page {
@@ -392,14 +429,66 @@ body {
 .empty-state { text-align: center; color: #999; padding: 32px 0; font-style: italic; }
 
 /* Preferred time slot picker */
-.timeslot-table { margin-top: 8px; margin-bottom: 8px; }
+.timeslot-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  background: #fff;
+  border: 1px solid #e4e0dd;
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 4px 0 8px;
+}
+
+.timeslot-table th {
+  padding: 12px 20px;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #6b6b6b;
+  background: #faf9f8;
+  border-bottom: 1px solid #e4e0dd;
+}
+
+.timeslot-table td {
+  padding: 11px 20px;
+  border-bottom: 1px solid #f0eeec;
+  color: #1a1a1a;
+}
+
+.timeslot-table tr:last-child td { border-bottom: none; }
 
 .timeslot-row { cursor: pointer; user-select: none; }
 
-.timeslot-row:focus { outline: 2px solid var(--slate); outline-offset: -2px; }
+.timeslot-row td { transition: background-color 0.15s ease; }
 
-.timeslot-row.selected td { background-color: rgba(149, 196, 221, 0.35); }
+.timeslot-row:hover td { background-color: #faf9f8; }
 
-.timeslot-row.selected:hover td { background-color: rgba(149, 196, 221, 0.5); }
+.timeslot-row:focus { outline: none; }
 
-.timeslot-choice { color: var(--slate); font-weight: 700; white-space: nowrap; }
+.timeslot-row:focus-visible td {
+  background-color: #f0f6fb;
+  box-shadow: inset 0 0 0 2px var(--slate);
+}
+
+.timeslot-row.selected td { background-color: #E6F1FA; }
+
+.timeslot-row.selected:hover td { background-color: #DAEAF6; }
+
+.timeslot-time { font-size: 1rem; letter-spacing: 0.01em; }
+
+.timeslot-period {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 11px;
+  border-radius: 50px;
+  white-space: nowrap;
+}
+
+.timeslot-choice-col { width: 110px; white-space: nowrap; }
+
+.timeslot-rank { font-size: 0.9rem; font-weight: 700; color: #3E7793; }

@@ -1,4 +1,3 @@
-from curses import KEY_A1
 from datetime import datetime, timedelta, timezone
 import os
 
@@ -75,6 +74,7 @@ class Token(BaseModel):
 class StudentSignUp(BaseModel):
     full_name: str
     student_id: str
+    age: int
     email_address: str
     grade: str
     first_choice: str
@@ -165,19 +165,24 @@ def update_coordinator(coordinator: CoordinatorCreate):
 def create_student_sign_up(sign_up: StudentSignUp):
     conn = get_conn()
     cur = conn.cursor()
+    cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM sign_ups")
+    new_id = cur.fetchone()[0]
     cur.execute(
         """
-        INSERT INTO sign_ups (full_name, is_student, student_id, email_address, grade, confirmed, first_choice, second_choice, third_choice)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id
+        INSERT INTO sign_ups (
+            id, full_name, is_student, student_id, age, timestamp,
+            email_address, grade, confirmed, time_slot,
+            first_choice, second_choice, third_choice
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
-            sign_up.full_name, sign_up.is_student, sign_up.student_id,
-            sign_up.email_address, sign_up.grade, sign_up.confirmed,
+            new_id, sign_up.full_name, sign_up.is_student, sign_up.student_id,
+            sign_up.age, datetime.now(timezone.utc), sign_up.email_address,
+            sign_up.grade, sign_up.confirmed, sign_up.first_choice,
             sign_up.first_choice, sign_up.second_choice, sign_up.third_choice
         )
     )
-    new_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
     conn.close()
