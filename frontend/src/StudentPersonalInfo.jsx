@@ -54,6 +54,8 @@ export default function StudentPersonalInfo({
     selectedSlots,
     toggleTimeSlot,
     handleSubmit,
+    submitError,
+    submitting,
 }) {
     const [slotError, setSlotError] = useState("");
 
@@ -222,8 +224,10 @@ export default function StudentPersonalInfo({
                         {slotError && <p className="login-error">{slotError}</p>}
                     </CollapsibleSection>
 
-                    <button type="submit" className="submit-btn">
-                        Register
+                    {submitError && <p className="login-error">{submitError}</p>}
+
+                    <button type="submit" className="submit-btn" disabled={submitting}>
+                        {submitting ? "Registering…" : "Register"}
                     </button>
                 </form>
             </section>

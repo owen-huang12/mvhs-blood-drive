@@ -1,3 +1,4 @@
+from curses import KEY_A1
 from datetime import datetime, timedelta, timezone
 import os
 
@@ -28,14 +29,12 @@ app.add_middleware(
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
-
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
-
 
 def get_conn():
     return psycopg2.connect(DATABASE_URL)
@@ -65,28 +64,24 @@ class CoordinatorCreate(BaseModel):
     email: str
     password: str
 
-
 class CoordinatorPublic(BaseModel):
     full_name: str
     email: str
-
 
 class Token(BaseModel):
     access_token: str
     token_type: str
 
 class StudentSignUp(BaseModel):
-    id: int
     full_name: str
-    is_student: bool
-    age: int
-    timestamp: datetime
+    student_id: str
     email_address: str
-    confirmed: bool
-    time_slot: datetime
+    grade: str
     first_choice: str
     second_choice: str
     third_choice: str
+    is_student: bool = True
+    confirmed: bool = False
 
 
 # routes
@@ -168,12 +163,22 @@ def update_coordinator(coordinator: CoordinatorCreate):
 
 @app.post('/student-sign-up')
 def create_student_sign_up(sign_up: StudentSignUp):
-    conn = get.conn()
-    curr = conn.get_cursor()
-    curr.execute(
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
         """
-        INSERT INTO sign_ups (id, full_name, is_student, age, timestamp, email_address, confirmed, time_slot, first_choice, second_choice, third_choice)
-        VALUES (%i, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO sign_ups (full_name, is_student, student_id, email_address, grade, confirmed, first_choice, second_choice, third_choice)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
         """,
-        () # add the values hereadd some more space at the bottom of the page so that when you scroll down all of the way you can still see the text of the last sectino
+        (
+            sign_up.full_name, sign_up.is_student, sign_up.student_id,
+            sign_up.email_address, sign_up.grade, sign_up.confirmed,
+            sign_up.first_choice, sign_up.second_choice, sign_up.third_choice
+        )
     )
+    new_id = cur.fetchone()[0]
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"id": new_id, **sign_up.model_dump()}

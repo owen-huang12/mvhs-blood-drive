@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, useNavigate } from "react-router-dom";
 
 import "./index.css";
 import HomePage from "./HomePage.jsx";
@@ -15,6 +15,9 @@ function Layout() {
     const [email, setEmail] = useState("");
     const [grade, setGrade] = useState("");
     const [selectedSlots, setSelectedSlots] = useState([]);
+    const [submitError, setSubmitError] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const navigate = useNavigate();
 
     const toggleTimeSlot = (slotKey) => {
         setSelectedSlots((prev) => {
@@ -28,8 +31,41 @@ function Layout() {
         });
     };
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
+        setSubmitError("");
+        setSubmitting(true);
+
+        const formatSlot = (slotKey) => slotKey.replace("__", " - ");
+        const [first_choice, second_choice, third_choice] =
+            selectedSlots.map(formatSlot);
+
+        try {
+            const res = await fetch("http://localhost:8000/student-sign-up", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    full_name: name,
+                    student_id: studentId,
+                    email_address: email,
+                    grade,
+                    first_choice,
+                    second_choice,
+                    third_choice,
+                }),
+            });
+
+            if (!res.ok) {
+                setSubmitError("Something went wrong submitting your registration. Please try again.");
+                return;
+            }
+
+            navigate("/");
+        } catch {
+            setSubmitError("Could not reach the server. Try again.");
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const formProps = {
@@ -39,6 +75,8 @@ function Layout() {
         grade, setGrade,
         selectedSlots, toggleTimeSlot,
         handleSubmit,
+        submitError,
+        submitting,
     };
 
     return (
