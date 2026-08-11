@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import CollapsibleSection from "./CollapsibleSection.jsx";
+import { signUpStudent } from "./api.js";
 
 const TIME_SLOTS = [
     { period: "Period 2", time: "8:30 AM" },
@@ -29,6 +31,8 @@ const TIME_SLOTS = [
 ];
 
 const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
+const GRADES = ["9th", "10th", "11th", "12th"];
+const REQUIRED_CHOICES = 3;
 
 const PERIOD_COLORS = {
     "Period 2": { bg: "#FBE7E4", text: "#A85449" },
@@ -42,34 +46,78 @@ const PERIOD_COLORS = {
     "Period 6": { bg: "#F3E4EF", text: "#8F5182" },
 };
 
-export default function StudentPersonalInfo({
-    name,
-    setName,
-    studentId,
-    setStudentId,
-    age,
-    setAge,
-    email,
-    setEmail,
-    grade,
-    setGrade,
-    selectedSlots,
-    toggleTimeSlot,
-    handleSubmit,
-    submitError,
-    submitting,
-}) {
-    const [slotError, setSlotError] = useState("");
+const slotKeyOf = (slot) => `${slot.period}__${slot.time}`;
 
-    const handleFormSubmit = (event) => {
-        if (selectedSlots.length !== 3) {
-            event.preventDefault();
-            setSlotError("Please select exactly 3 preferred time slots.");
+/** Labelled required text input — the shape every field on this form takes. */
+function Field({ id, label, value, onChange, ...inputProps }) {
+    return (
+        <div className="form-field">
+            <label htmlFor={id}>
+                {label} <span className="required">*</span>
+            </label>
+            <input
+                id={id}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                required
+                {...inputProps}
+            />
+        </div>
+    );
+}
+
+export default function StudentPersonalInfo() {
+    const [name, setName] = useState("");
+    const [studentId, setStudentId] = useState("");
+    const [age, setAge] = useState("");
+    const [email, setEmail] = useState("");
+    const [grade, setGrade] = useState("");
+    const [selectedSlots, setSelectedSlots] = useState([]);
+    const [error, setError] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const navigate = useNavigate();
+
+    const toggleTimeSlot = (slotKey) => {
+        setSelectedSlots((prev) => {
+            if (prev.includes(slotKey)) return prev.filter((k) => k !== slotKey);
+            return prev.length >= REQUIRED_CHOICES ? prev : [...prev, slotKey];
+        });
+    };
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+
+        if (selectedSlots.length !== REQUIRED_CHOICES) {
+            setError(`Please select exactly ${REQUIRED_CHOICES} preferred time slots.`);
             return;
         }
-        setSlotError("");
-        handleSubmit(event);
+
+        setError("");
+        setSubmitting(true);
+
+        const [first_choice, second_choice, third_choice] = selectedSlots.map(
+            (slotKey) => slotKey.replace("__", " - ")
+        );
+
+        try {
+            await signUpStudent({
+                full_name: name,
+                student_id: studentId,
+                age: Number(age),
+                email_address: email,
+                grade,
+                first_choice,
+                second_choice,
+                third_choice,
+            });
+            navigate("/completed", { replace: true, state: { email } });
+        } catch {
+            setError("Something went wrong submitting your registration. Please try again.");
+        } finally {
+            setSubmitting(false);
+        }
     };
+
     return (
         <main className="page">
             <CollapsibleSection title="Overview of the Stanford Blood Drive">
@@ -93,85 +141,56 @@ export default function StudentPersonalInfo({
             </CollapsibleSection>
 
             <section className="form-section">
-                <form className="signup-form" onSubmit={handleFormSubmit}>
-                    <CollapsibleSection
-                        as="div"
-                        title="Personal & Contact information"
-                    >
+                <form className="signup-form" onSubmit={handleSubmit}>
+                    <CollapsibleSection as="div" title="Personal & Contact information">
                         <p className="form-prompt">
-                            Please fill out the form below with your
-                            information to register for the blood drive. All
-                            fields are required.
+                            Please fill out the form below with your information
+                            to register for the blood drive. All fields are
+                            required.
                         </p>
-                        <div className="form-field">
-                            <label htmlFor="name">
-                                Full Name <span className="required">*</span>
-                            </label>
-                            <input
-                                id="name"
-                                type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Please enter your full name"
-                                required
-                            />
-                        </div>
-                        <div className="form-field">
-                            <label htmlFor="studentId">
-                                Student ID <span className="required">*</span>
-                            </label>
-                            <input
-                                id="studentId"
-                                type="text"
-                                value={studentId}
-                                onChange={(e) => setStudentId(e.target.value)}
-                                placeholder=""
-                                required
-                            />
-                        </div>
-                        <div className="form-field">
-                            <label htmlFor="age">
-                                Age <span className="required">*</span>
-                            </label>
-                            <input
-                                id="age"
-                                type="number"
-                                min="1"
-                                value={age}
-                                onChange={(e) => setAge(e.target.value)}
-                                placeholder=""
-                                required
-                            />
-                        </div>
-                        <div className="form-field">
-                            <label htmlFor="email">
-                                Email (preferred email){" "}
-                                <span className="required">*</span>
-                            </label>
-                            <input
-                                id="email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder=""
-                                required
-                            />
-                        </div>
+
+                        <Field
+                            id="name"
+                            label="Full Name"
+                            value={name}
+                            onChange={setName}
+                            placeholder="Please enter your full name"
+                        />
+                        <Field
+                            id="studentId"
+                            label="Student ID"
+                            value={studentId}
+                            onChange={setStudentId}
+                        />
+                        <Field
+                            id="age"
+                            label="Age"
+                            type="number"
+                            min="1"
+                            value={age}
+                            onChange={setAge}
+                        />
+                        <Field
+                            id="email"
+                            label="Email (preferred email)"
+                            type="email"
+                            value={email}
+                            onChange={setEmail}
+                        />
+
                         <div className="form-field">
                             <span className="form-field-label">
                                 Grade <span className="required">*</span>
                             </span>
                             <div className="grade-options">
-                                {["9th", "10th", "11th", "12th"].map((g) => (
+                                {GRADES.map((g) => (
                                     <label key={g} className="grade-radio">
                                         <input
                                             type="radio"
                                             name="grade"
                                             value={g}
                                             checked={grade === g}
-                                            onChange={(e) =>
-                                                setGrade(e.target.value)
-                                            }
+                                            onChange={(e) => setGrade(e.target.value)}
                                         />
                                         {g}
                                     </label>
@@ -182,10 +201,10 @@ export default function StudentPersonalInfo({
 
                     <CollapsibleSection as="div" title="Preferred time slot">
                         <p className="form-prompt">
-                            Please select exactly 3 of your preferred time
-                            slots, in order of preference. The order you click
-                            them in sets your 1st, 2nd, and 3rd choice.
-                            {/*figure out the schedule day and stuff and what day it is*/}
+                            Please select exactly {REQUIRED_CHOICES} of your
+                            preferred time slots, in order of preference. The
+                            order you click them in sets your 1st, 2nd, and 3rd
+                            choice.
                         </p>
 
                         <table className="timeslot-table">
@@ -198,26 +217,24 @@ export default function StudentPersonalInfo({
                             </thead>
                             <tbody>
                                 {TIME_SLOTS.map((slot) => {
-                                    const slotKey = `${slot.period}__${slot.time}`;
+                                    const slotKey = slotKeyOf(slot);
                                     const rank = selectedSlots.indexOf(slotKey);
                                     const isSelected = rank !== -1;
                                     const colors = PERIOD_COLORS[slot.period];
+                                    const select = () => toggleTimeSlot(slotKey);
+
                                     return (
                                         <tr
                                             key={slotKey}
-                                            className={
-                                                isSelected
-                                                    ? "timeslot-row selected"
-                                                    : "timeslot-row"
-                                            }
+                                            className={`timeslot-row${isSelected ? " selected" : ""}`}
                                             role="button"
                                             aria-pressed={isSelected}
                                             tabIndex={0}
-                                            onClick={() => toggleTimeSlot(slotKey)}
+                                            onClick={select}
                                             onKeyDown={(e) => {
                                                 if (e.key === "Enter" || e.key === " ") {
                                                     e.preventDefault();
-                                                    toggleTimeSlot(slotKey);
+                                                    select();
                                                 }
                                             }}
                                         >
@@ -245,11 +262,9 @@ export default function StudentPersonalInfo({
                                 })}
                             </tbody>
                         </table>
-
-                        {slotError && <p className="login-error">{slotError}</p>}
                     </CollapsibleSection>
 
-                    {submitError && <p className="login-error">{submitError}</p>}
+                    {error && <p className="login-error">{error}</p>}
 
                     <button type="submit" className="submit-btn" disabled={submitting}>
                         {submitting ? "Registering…" : "Register"}

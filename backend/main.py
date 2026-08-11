@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import os
 
@@ -35,8 +36,21 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
-def get_conn():
-    return psycopg2.connect(DATABASE_URL)
+@contextmanager
+def db_cursor(commit: bool = False):
+    """Yield a cursor, committing on success and always closing the connection.
+
+    Without this the previous per-route boilerplate leaked a connection
+    whenever a query raised.
+    """
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            yield cur
+        if commit:
+            conn.commit()
+    finally:
+        conn.close()
 
 
 def create_access_token(data: dict) -> str:
@@ -93,15 +107,12 @@ def read_root():
 
 @app.post("/login", response_model=Token)
 def login(form: OAuth2PasswordRequestForm = Depends()):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT password_hash FROM coordinators WHERE email = %s",
-        (form.username)
-    )
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT password_hash FROM coordinators WHERE email = %s",
+            (form.username,)
+        )
+        row = cur.fetchone()
 
     if row is None or not verify_password(form.password, row[0]):
         raise HTTPException(
@@ -115,12 +126,10 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
 
 @app.get("/me", response_model=CoordinatorPublic)
 def get_me(email: str = Depends(get_current_coordinator)):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT full_name, email FROM coordinators WHERE email = %s", (email,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
+    with db_cursor() as cur:
+        cur.execute("SELECT full_name, email FROM coordinators WHERE email = %s", (email,))
+        row = cur.fetchone()
+
     if row is None:
         raise HTTPException(status_code=404, detail="Coordinator not found")
     return CoordinatorPublic(full_name=row[0], email=row[1])
@@ -129,61 +138,50 @@ def get_me(email: str = Depends(get_current_coordinator)):
 @app.post("/coordinator", response_model=CoordinatorPublic)
 def create_coordinator(coordinator: CoordinatorCreate):
     hashed = hash_password(coordinator.password)
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO coordinators (full_name, email, password_hash) VALUES (%s, %s, %s)",
-        (coordinator.full_name, coordinator.email, hashed)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO coordinators (full_name, email, password_hash) VALUES (%s, %s, %s)",
+            (coordinator.full_name, coordinator.email, hashed)
+        )
     return CoordinatorPublic(full_name=coordinator.full_name, email=coordinator.email)
 
 
 @app.put("/coordinator", response_model=CoordinatorPublic)
 def update_coordinator(coordinator: CoordinatorCreate):
     hashed = hash_password(coordinator.password)
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO coordinators (full_name, email, password_hash)
-           VALUES (%s, %s, %s)
-           ON CONFLICT (email) DO UPDATE
-           SET full_name = EXCLUDED.full_name,
-               password_hash = EXCLUDED.password_hash
-        """,
-        (coordinator.full_name, coordinator.email, hashed)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO coordinators (full_name, email, password_hash)
+               VALUES (%s, %s, %s)
+               ON CONFLICT (email) DO UPDATE
+               SET full_name = EXCLUDED.full_name,
+                   password_hash = EXCLUDED.password_hash
+            """,
+            (coordinator.full_name, coordinator.email, hashed)
+        )
     return CoordinatorPublic(full_name=coordinator.full_name, email=coordinator.email)
 
 
 @app.post('/student-sign-up')
 def create_student_sign_up(sign_up: StudentSignUp):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM sign_ups")
-    new_id = cur.fetchone()[0]
-    cur.execute(
-        """
-        INSERT INTO sign_ups (
-            id, full_name, is_student, student_id, age, timestamp,
-            email_address, grade, confirmed, time_slot,
-            first_choice, second_choice, third_choice
+    with db_cursor(commit=True) as cur:
+        # NOTE: races with concurrent signups. Fix is an identity column on id.
+        cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM sign_ups")
+        new_id = cur.fetchone()[0]
+        cur.execute(
+            """
+            INSERT INTO sign_ups (
+                id, full_name, is_student, student_id, age, timestamp,
+                email_address, grade, confirmed, time_slot,
+                first_choice, second_choice, third_choice
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                new_id, sign_up.full_name, sign_up.is_student, sign_up.student_id,
+                sign_up.age, datetime.now(timezone.utc), sign_up.email_address,
+                sign_up.grade, sign_up.confirmed, sign_up.first_choice,
+                sign_up.first_choice, sign_up.second_choice, sign_up.third_choice
+            )
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """,
-        (
-            new_id, sign_up.full_name, sign_up.is_student, sign_up.student_id,
-            sign_up.age, datetime.now(timezone.utc), sign_up.email_address,
-            sign_up.grade, sign_up.confirmed, sign_up.first_choice,
-            sign_up.first_choice, sign_up.second_choice, sign_up.third_choice
-        )
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
     return {"id": new_id, **sign_up.model_dump()}

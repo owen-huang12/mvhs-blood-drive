@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import icon from "./assets/icon.png";
 import { saveToken } from "./auth.js";
+import { login } from "./api.js";
 
 export default function CoordinatorsPage() {
     const [email, setEmail] = useState("");
@@ -15,27 +16,16 @@ export default function CoordinatorsPage() {
         setError("");
         setLoading(true);
 
-        const body = new URLSearchParams();
-        body.append("username", email);
-        body.append("password", password);
-
         try {
-            const res = await fetch("http://localhost:8000/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body,
-            });
-
-            if (!res.ok) {
-                setError("Incorrect email or password.");
-                return;
-            }
-
-            const data = await res.json();
-            saveToken(data.access_token);
+            const { access_token } = await login(email, password);
+            saveToken(access_token);
             navigate("/coordinators/dashboard");
-        } catch {
-            setError("Could not reach the server. Try again.");
+        } catch (err) {
+            setError(
+                err.status === 401
+                    ? "Incorrect email or password."
+                    : "Could not reach the server. Try again."
+            );
         } finally {
             setLoading(false);
         }
