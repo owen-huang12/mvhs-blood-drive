@@ -6,6 +6,7 @@ import HomePage from "./HomePage.jsx";
 import StudentPersonalInfo from "./StudentPersonalInfo.jsx";
 import CoordinatorsPage from "./CoordinatorsPage.jsx";
 import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
+import CompletedStudentForm from "./CompletedStudentForm.jsx";
 import RequireAuth from "./RequireAuth.jsx";
 import icon from "./assets/icon.png";
 
@@ -62,7 +63,7 @@ function Layout() {
                 return;
             }
 
-            navigate("/");
+            navigate("/completed", { replace: true, state: { email } });
         } catch {
             setSubmitError("Could not reach the server. Try again.");
         } finally {
@@ -96,6 +97,7 @@ function Layout() {
             <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/signup" element={<StudentPersonalInfo {...formProps} />} />
+                <Route path="/completed" element={<CompletedStudentForm />} />
             </Routes>
         </>
     );
