@@ -2,51 +2,15 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import CollapsibleSection from "./CollapsibleSection.jsx";
 import { signUpStudent } from "./api.js";
+import {
+    CHOICE_LABELS,
+    REQUIRED_CHOICES,
+    TIME_SLOTS,
+    colorsForPeriod,
+    formatSlot,
+} from "./timeSlots.js";
 
-const TIME_SLOTS = [
-    { period: "Period 2", time: "8:30 AM" },
-    { period: "Period 2", time: "8:45 AM" },
-    { period: "Period 2", time: "9:00 AM" },
-    { period: "Period 2", time: "9:15 AM" },
-    { period: "Period 2", time: "9:30 AM" },
-    { period: "Period 2", time: "9:45 AM" },
-    { period: "Period 2/Tutorial", time: "10:00 AM" },
-    { period: "Tutorial", time: "10:15 AM" },
-    { period: "Tutorial", time: "10:30 AM" },
-    { period: "Tutorial", time: "10:45 AM" },
-    { period: "Brunch/Period 4", time: "11:00 AM" },
-    { period: "Period 4", time: "11:15 AM" },
-    { period: "Period 4", time: "11:30 AM" },
-    { period: "Period 4", time: "11:45 AM" },
-    { period: "Period 4", time: "12:00 PM" },
-    { period: "Period 4", time: "12:15 PM" },
-    { period: "Period 4/Lunch", time: "12:30 PM" },
-    { period: "Lunch", time: "12:45 PM" },
-    { period: "Lunch", time: "1:00 PM" },
-    { period: "Lunch/Period 6", time: "1:15 PM" },
-    { period: "Period 6", time: "1:30 PM" },
-    { period: "Period 6", time: "1:45 PM" },
-    { period: "Period 6", time: "2:00 PM" },
-    { period: "Period 6", time: "2:15 PM" },
-];
-
-const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
 const GRADES = ["9th", "10th", "11th", "12th"];
-const REQUIRED_CHOICES = 3;
-
-const PERIOD_COLORS = {
-    "Period 2": { bg: "#FBE7E4", text: "#A85449" },
-    "Period 2/Tutorial": { bg: "#FBEDE0", text: "#A16B3C" },
-    "Tutorial": { bg: "#FAF3DD", text: "#8E7530" },
-    "Brunch/Period 4": { bg: "#EAF3E3", text: "#5E8148" },
-    "Period 4": { bg: "#E0F0EB", text: "#3F7F70" },
-    "Period 4/Lunch": { bg: "#DFEEF5", text: "#3E7793" },
-    "Lunch": { bg: "#E3E9F8", text: "#4C64A5" },
-    "Lunch/Period 6": { bg: "#E9E4F6", text: "#68569F" },
-    "Period 6": { bg: "#F3E4EF", text: "#8F5182" },
-};
-
-const slotKeyOf = (slot) => `${slot.period}__${slot.time}`;
 
 /** Labelled required text input — the shape every field on this form takes. */
 function Field({ id, label, value, onChange, ...inputProps }) {
@@ -95,9 +59,8 @@ export default function StudentPersonalInfo() {
         setError("");
         setSubmitting(true);
 
-        const [first_choice, second_choice, third_choice] = selectedSlots.map(
-            (slotKey) => slotKey.replace("__", " - ")
-        );
+        // Already stored as "<period> - <time>" by formatSlot.
+        const [first_choice, second_choice, third_choice] = selectedSlots;
 
         try {
             await signUpStudent({
@@ -217,10 +180,10 @@ export default function StudentPersonalInfo() {
                             </thead>
                             <tbody>
                                 {TIME_SLOTS.map((slot) => {
-                                    const slotKey = slotKeyOf(slot);
+                                    const slotKey = formatSlot(slot);
                                     const rank = selectedSlots.indexOf(slotKey);
                                     const isSelected = rank !== -1;
-                                    const colors = PERIOD_COLORS[slot.period];
+                                    const colors = colorsForPeriod(slot.period);
                                     const select = () => toggleTimeSlot(slotKey);
 
                                     return (

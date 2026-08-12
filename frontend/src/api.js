@@ -24,7 +24,17 @@ async function request(path, { method = "GET", body, form, auth = false } = {}) 
         body: body ? JSON.stringify(body) : form,
     });
 
-    if (!res.ok) throw new ApiError(res.status, `Request failed: ${res.status}`);
+    if (!res.ok) {
+        // FastAPI puts the human-readable reason in `detail`; surface it so
+        // callers can show the real message rather than a status code.
+        let detail;
+        try {
+            ({ detail } = await res.json());
+        } catch {
+            detail = undefined;
+        }
+        throw new ApiError(res.status, detail || `Request failed: ${res.status}`);
+    }
     return res.json();
 }
 
@@ -32,6 +42,26 @@ export const signUpStudent = (signUp) =>
     request("/student-sign-up", { method: "POST", body: signUp });
 
 export const getCurrentCoordinator = () => request("/me", { auth: true });
+
+export const listSignUps = () => request("/sign-ups", { auth: true });
+
+export const confirmSignUp = (id, timeSlot) =>
+    request(`/sign-ups/${id}/confirm`, {
+        method: "PATCH",
+        auth: true,
+        body: { time_slot: timeSlot },
+    });
+
+export const unconfirmSignUp = (id) =>
+    request(`/sign-ups/${id}/unconfirm`, { method: "PATCH", auth: true });
+
+/** Coordinator override: move a sign-up to any slot on the schedule. */
+export const moveSignUp = (id, timeSlot) =>
+    request(`/sign-ups/${id}/slot`, {
+        method: "PATCH",
+        auth: true,
+        body: { time_slot: timeSlot },
+    });
 
 export const login = (email, password) =>
     request("/login", {
