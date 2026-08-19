@@ -52,7 +52,9 @@ export default function CoordinatorDashboard() {
             if (rows.status === "fulfilled") {
                 setSignUps(rows.value);
             } else {
-                setError("Could not load sign-ups. Check that the server is running.");
+                setError(
+                    "Could not load sign-ups. Check that the server is running.",
+                );
             }
             setLoading(false);
         })();
@@ -65,7 +67,7 @@ export default function CoordinatorDashboard() {
     /** Swap the updated row in place so the table doesn't refetch and jump. */
     const applyUpdate = (updated) =>
         setSignUps((prev) =>
-            prev.map((signUp) => (signUp.id === updated.id ? updated : signUp))
+            prev.map((signUp) => (signUp.id === updated.id ? updated : signUp)),
         );
 
     /**
@@ -90,12 +92,6 @@ export default function CoordinatorDashboard() {
         }
     };
 
-    /**
-     * Manual override for a *pending* row — assigns any slot on the schedule,
-     * not just one of the person's three choices. Unlike handleMove there's
-     * nothing to animate optimistically yet (the row hasn't confirmed), so
-     * this mirrors handleConfirm's shape rather than handleMove's.
-     */
     const handleOverride = async (id, timeSlot) => {
         try {
             const updated = await moveSignUp(id, timeSlot);
@@ -116,7 +112,9 @@ export default function CoordinatorDashboard() {
     const handleMove = async (id, timeSlot) => {
         const previous = signUps;
         setSignUps((rows) =>
-            rows.map((row) => (row.id === id ? { ...row, time_slot: timeSlot } : row))
+            rows.map((row) =>
+                row.id === id ? { ...row, time_slot: timeSlot } : row,
+            ),
         );
 
         try {
@@ -153,7 +151,7 @@ export default function CoordinatorDashboard() {
         setSlotFullMessage(
             `${slotKey} is full (${capacity} ${
                 capacity === 1 ? "appointment" : "appointments"
-            } maximum).`
+            } maximum).`,
         );
     };
 
@@ -174,7 +172,9 @@ export default function CoordinatorDashboard() {
             </Header>
 
             <main className="dashboard-content">
-                <h2 className="dashboard-section-title">Coordinator Dashboard</h2>
+                <h2 className="dashboard-section-title">
+                    Coordinator Dashboard
+                </h2>
 
                 <div className="dashboard-body">
                     {error && <p className="login-error">{error}</p>}
