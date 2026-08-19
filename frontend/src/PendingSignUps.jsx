@@ -21,7 +21,14 @@ function collapseRow(el) {
     });
 }
 
-function PendingRow({ signUp, onConfirm, onCommit, isSlotFull, earliestOpen }) {
+function PendingRow({
+    signUp,
+    onConfirm,
+    onOverride,
+    onCommit,
+    isSlotFull,
+    earliestOpen,
+}) {
     const choices = [
         signUp.first_choice,
         signUp.second_choice,
@@ -39,6 +46,13 @@ function PendingRow({ signUp, onConfirm, onCommit, isSlotFull, earliestOpen }) {
     const autoAssigned = !picked && allChoicesFull && Boolean(earliestOpen);
     const slot = picked || (autoAssigned ? earliestOpen : "");
 
+    // Anything outside the person's three stored choices — whether picked
+    // manually from "Assign any time" or defaulted to the earliest opening
+    // because all three were full — is a coordinator override. The strict
+    // /confirm endpoint would 400 on either, so those go through /slot
+    // instead, same as drag-and-drop.
+    const isOverride = Boolean(slot) && !choices.includes(slot);
+
     const busy = status !== "idle";
 
     async function handleConfirm() {
@@ -46,7 +60,9 @@ function PendingRow({ signUp, onConfirm, onCommit, isSlotFull, earliestOpen }) {
         setStatus("saving");
         let updated;
         try {
-            updated = await onConfirm(signUp.id, slot);
+            updated = isOverride
+                ? await onOverride(signUp.id, slot)
+                : await onConfirm(signUp.id, slot);
         } catch {
             setStatus("idle");
             return;
@@ -105,6 +121,7 @@ function PendingRow({ signUp, onConfirm, onCommit, isSlotFull, earliestOpen }) {
 export default function PendingSignUps({
     signUps,
     onConfirm,
+    onOverride,
     onCommit,
     isSlotFull,
     earliestOpen,
@@ -125,6 +142,7 @@ export default function PendingSignUps({
                             key={signUp.id}
                             signUp={signUp}
                             onConfirm={onConfirm}
+                            onOverride={onOverride}
                             onCommit={onCommit}
                             isSlotFull={isSlotFull}
                             earliestOpen={earliestOpen}

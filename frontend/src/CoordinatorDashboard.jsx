@@ -90,6 +90,28 @@ export default function CoordinatorDashboard() {
         }
     };
 
+    /**
+     * Manual override for a *pending* row — assigns any slot on the schedule,
+     * not just one of the person's three choices. Unlike handleMove there's
+     * nothing to animate optimistically yet (the row hasn't confirmed), so
+     * this mirrors handleConfirm's shape rather than handleMove's.
+     */
+    const handleOverride = async (id, timeSlot) => {
+        try {
+            const updated = await moveSignUp(id, timeSlot);
+            setError("");
+            return updated;
+        } catch (err) {
+            if (err.status === 409) {
+                setError("");
+                setSlotFullMessage(err.message);
+            } else {
+                setError("Could not assign that time slot. Please try again.");
+            }
+            throw err;
+        }
+    };
+
     /** Optimistic: the row follows the cursor immediately, reverting on failure. */
     const handleMove = async (id, timeSlot) => {
         const previous = signUps;
@@ -164,6 +186,7 @@ export default function CoordinatorDashboard() {
                             <PendingSignUps
                                 signUps={pending}
                                 onConfirm={handleConfirm}
+                                onOverride={handleOverride}
                                 onCommit={applyUpdate}
                                 isSlotFull={(key) => isSlotFull(confirmed, key)}
                                 earliestOpen={firstOpenSlot(confirmed)}
