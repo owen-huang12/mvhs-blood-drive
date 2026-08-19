@@ -1,13 +1,6 @@
 import { useRef, useState } from "react";
 import { animate } from "animejs";
-import { colorsForPeriod, parseSlot } from "./timeSlots.js";
-
-const CHOICE_SUFFIX = [" (1st)", " (2nd)", " (3rd)"];
-
-const displaySlot = (value) => {
-    const { period, time } = parseSlot(value);
-    return time ? `${period}: ${time}` : period;
-};
+import SlotPicker from "./SlotPicker.jsx";
 
 /** Promise-wrapped animate() so steps can be awaited in sequence. */
 const run = (targets, params) =>
@@ -28,22 +21,28 @@ function collapseRow(el) {
     });
 }
 
-function PendingRow({ signUp, onConfirm, onCommit }) {
-    // De-duplicated so a person who picked the same slot twice doesn't get
-    // repeated options.
+function PendingRow({ signUp, onConfirm, onCommit, isSlotFull, earliestOpen }) {
     const choices = [
-        ...new Set([signUp.first_choice, signUp.second_choice, signUp.third_choice]),
+        signUp.first_choice,
+        signUp.second_choice,
+        signUp.third_choice,
     ].filter(Boolean);
 
-    const [slot, setSlot] = useState(choices[0] ?? signUp.time_slot);
+    // Nothing is preselected — the coordinator picks. The one exception is
+    // when every choice is full, where we fall back to the earliest opening.
+    const [picked, setPicked] = useState("");
     const [status, setStatus] = useState("idle"); // idle | saving | done
     const rowRef = useRef(null);
     const pillRef = useRef(null);
 
-    const colors = colorsForPeriod(parseSlot(slot).period);
+    const allChoicesFull = choices.length > 0 && choices.every(isSlotFull);
+    const autoAssigned = !picked && allChoicesFull && Boolean(earliestOpen);
+    const slot = picked || (autoAssigned ? earliestOpen : "");
+
     const busy = status !== "idle";
 
     async function handleConfirm() {
+        if (!slot) return;
         setStatus("saving");
         let updated;
         try {
@@ -73,30 +72,22 @@ function PendingRow({ signUp, onConfirm, onCommit }) {
             <span className="pending-meta">{signUp.student_id}</span>
             <span className="pending-meta">Age: {signUp.age}</span>
 
-            <label className="pending-slot-label" htmlFor={`slot-${signUp.id}`}>
-                Time Slot:
-            </label>
-            <select
-                id={`slot-${signUp.id}`}
-                className="slot-select"
-                style={{ backgroundColor: colors.bg, color: colors.text }}
+            <span className="pending-slot-label">Time Slot:</span>
+            <SlotPicker
+                choices={choices}
                 value={slot}
-                onChange={(e) => setSlot(e.target.value)}
+                onChange={setPicked}
+                isFull={isSlotFull}
+                autoAssigned={autoAssigned}
                 disabled={busy}
-            >
-                {choices.map((choice, index) => (
-                    <option key={choice} value={choice}>
-                        {displaySlot(choice)}
-                        {CHOICE_SUFFIX[index]}
-                    </option>
-                ))}
-            </select>
+            />
 
             <button
                 type="button"
                 className="confirm-btn"
                 onClick={handleConfirm}
-                disabled={busy}
+                disabled={busy || !slot}
+                title={slot ? undefined : "Pick a time slot first"}
             >
                 {status === "saving" ? "confirming…" : "confirm"}
             </button>
@@ -111,7 +102,13 @@ function PendingRow({ signUp, onConfirm, onCommit }) {
     );
 }
 
-export default function PendingSignUps({ signUps, onConfirm, onCommit }) {
+export default function PendingSignUps({
+    signUps,
+    onConfirm,
+    onCommit,
+    isSlotFull,
+    earliestOpen,
+}) {
     return (
         <section className="dash-section">
             <h3 className="dash-heading">
@@ -129,6 +126,8 @@ export default function PendingSignUps({ signUps, onConfirm, onCommit }) {
                             signUp={signUp}
                             onConfirm={onConfirm}
                             onCommit={onCommit}
+                            isSlotFull={isSlotFull}
+                            earliestOpen={earliestOpen}
                         />
                     ))}
                 </div>

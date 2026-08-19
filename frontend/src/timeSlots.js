@@ -33,16 +33,23 @@ export const TIME_SLOTS = [
     { period: "Period 6", time: "2:15 PM" },
 ];
 
+/**
+ * Pastel ramp running warm (morning) to cool (afternoon). Deliberately avoids
+ * saturated red, which is reserved for error and full-slot states so the two
+ * never read as the same signal.
+ *
+ * Every pairing below clears WCAG AA (4.5:1) for body text.
+ */
 export const PERIOD_COLORS = {
-    "Period 2": { bg: "#FBE7E4", text: "#A85449" },
-    "Period 2/Tutorial": { bg: "#FBEDE0", text: "#A16B3C" },
-    "Tutorial": { bg: "#FAF3DD", text: "#8E7530" },
-    "Brunch/Period 4": { bg: "#EAF3E3", text: "#5E8148" },
-    "Period 4": { bg: "#E0F0EB", text: "#3F7F70" },
-    "Period 4/Lunch": { bg: "#DFEEF5", text: "#3E7793" },
-    "Lunch": { bg: "#E3E9F8", text: "#4C64A5" },
-    "Lunch/Period 6": { bg: "#E9E4F6", text: "#68569F" },
-    "Period 6": { bg: "#F3E4EF", text: "#8F5182" },
+    "Period 2": { bg: "#FBF8CC", text: "#6E6813" },
+    "Period 2/Tutorial": { bg: "#FDE4CF", text: "#8A5320" },
+    "Tutorial": { bg: "#FFCFD2", text: "#97383F" },
+    "Brunch/Period 4": { bg: "#F1C0E8", text: "#8A2F7B" },
+    "Period 4": { bg: "#CFBAF0", text: "#553094" },
+    "Period 4/Lunch": { bg: "#A3C4F3", text: "#2A4A8A" },
+    "Lunch": { bg: "#90DBF4", text: "#115C75" },
+    "Lunch/Period 6": { bg: "#8EECF5", text: "#0B6270" },
+    "Period 6": { bg: "#B9FBC0", text: "#1C6B34" },
 };
 
 export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
@@ -179,6 +186,15 @@ export function countInSlot(signUps, slotKey) {
 
 export const isSlotFull = (signUps, slotKey) =>
     countInSlot(signUps, slotKey) >= capacityFor(slotKey);
+
+/**
+ * Earliest slot on the schedule that still has room — the fallback when
+ * every one of a person's three choices is already full.
+ */
+export function firstOpenSlot(signUps) {
+    const slot = TIME_SLOTS.find((s) => !isSlotFull(signUps, formatSlot(s)));
+    return slot ? formatSlot(slot) : "";
+}
 
 /** Total unfilled positions across the whole schedule. */
 export function countOpenSlots(signUps) {

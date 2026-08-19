@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "./Header.jsx";
 import Modal from "./Modal.jsx";
+import Spinner from "./Spinner.jsx";
 import PendingSignUps from "./PendingSignUps.jsx";
 import AppointmentTable from "./AppointmentTable.jsx";
 import { clearToken } from "./auth.js";
-import { capacityFor } from "./timeSlots.js";
+import { capacityFor, firstOpenSlot, isSlotFull } from "./timeSlots.js";
 import {
     confirmSignUp,
     getCurrentCoordinator,
@@ -13,6 +14,9 @@ import {
     moveSignUp,
     unconfirmSignUp,
 } from "./api.js";
+
+/** How long the "slot is full" popup stays up before dismissing itself. */
+const SLOT_FULL_POPUP_MS = 400;
 
 const initialsOf = (name) =>
     name
@@ -74,7 +78,14 @@ export default function CoordinatorDashboard() {
             setError("");
             return updated;
         } catch (err) {
-            setError("Could not confirm that sign-up. Please try again.");
+            // A full slot is a conflict, not a failure — show it as a popup
+            // and leave the row in place so another slot can be picked.
+            if (err.status === 409) {
+                setError("");
+                setSlotFullMessage(err.message);
+            } else {
+                setError("Could not confirm that sign-up. Please try again.");
+            }
             throw err;
         }
     };
@@ -147,13 +158,15 @@ export default function CoordinatorDashboard() {
                     {error && <p className="login-error">{error}</p>}
 
                     {loading ? (
-                        <p className="empty-state">Loading sign-ups…</p>
+                        <Spinner label="Loading sign-ups…" />
                     ) : (
                         <>
                             <PendingSignUps
                                 signUps={pending}
                                 onConfirm={handleConfirm}
                                 onCommit={applyUpdate}
+                                isSlotFull={(key) => isSlotFull(confirmed, key)}
+                                earliestOpen={firstOpenSlot(confirmed)}
                             />
                             <AppointmentTable
                                 signUps={confirmed}
@@ -171,20 +184,9 @@ export default function CoordinatorDashboard() {
                 <Modal
                     title="Slot is full"
                     onClose={() => setSlotFullMessage("")}
-                    actions={
-                        <button
-                            type="button"
-                            className="modal-btn primary"
-                            onClick={() => setSlotFullMessage("")}
-                        >
-                            Got it
-                        </button>
-                    }
+                    autoCloseMs={SLOT_FULL_POPUP_MS}
                 >
                     <p>{slotFullMessage}</p>
-                    <p className="modal-note">
-                        Move someone out of that slot first, or choose another time.
-                    </p>
                 </Modal>
             )}
 
