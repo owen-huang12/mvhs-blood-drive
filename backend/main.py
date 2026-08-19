@@ -19,9 +19,15 @@ ACCESS_TOKEN_EXPIRE_HOURS = 12
 
 app = FastAPI()
 
+# FRONTEND_ORIGIN lets the deployed frontend's URL be set per-environment
+# (e.g. https://mvhs-blood-drive.vercel.app) without hardcoding it here.
+_allowed_origins = ["http://localhost:5173"]
+if frontend_origin := os.environ.get("FRONTEND_ORIGIN"):
+    _allowed_origins.append(frontend_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
