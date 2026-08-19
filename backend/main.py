@@ -21,7 +21,7 @@ app = FastAPI()
 
 # FRONTEND_ORIGIN lets the deployed frontend's URL be set per-environment
 # (e.g. https://mvhs-blood-drive.vercel.app) without hardcoding it here.
-_allowed_origins = [""]
+_allowed_origins = ["https://mvhs-blood-drive.vercel.app"]
 if frontend_origin := os.environ.get("FRONTEND_ORIGIN"):
     _allowed_origins.append(frontend_origin)
 
