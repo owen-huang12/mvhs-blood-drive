@@ -759,18 +759,37 @@ body {
 
 /* ── Drag and drop (appointment slotting) ──────────────────────────── */
 
-.appointment-table tr[draggable="true"] { cursor: grab; }
+/* The whole row is the handle. Suppressing selection across all of it is what
+   makes that possible — otherwise a drag beginning on a text cell smears a
+   selection highlight instead of picking the row up. */
+.appointment-table tr[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
 
 .appointment-table tr[draggable="true"]:active { cursor: grabbing; }
 
-/* No text selection on the drag handle — dragging otherwise smears a
-   selection highlight across the table. */
+/* The period cell spans the group, so it is the one part of the row that does
+   not drag; it should not advertise a grab cursor. */
+.appointment-table tr[draggable="true"] .period-cell { cursor: default; }
+
+/* Buttons keep their own affordance rather than inheriting the grab cursor. */
+.appointment-table tr[draggable="true"] button { cursor: pointer; }
+
 .drag-name {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  user-select: none;
-  -webkit-user-select: none;
+}
+
+/* Off-screen stand-in used as the drag ghost; see setRowDragImage. */
+.drag-ghost {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  table-layout: fixed;
+  pointer-events: none;
 }
 
 .drag-grip {

@@ -63,6 +63,59 @@ export const moveSignUp = (id, timeSlot) =>
         body: { time_slot: timeSlot },
     });
 
+/**
+ * Parse one SSE frame into `{ type, data }`, or null if it carries no data.
+ *
+ * Comment frames (`: keepalive`) are the null case — they exist only to hold
+ * the connection open through proxies.
+ */
+function parseFrame(frame) {
+    let type = "message";
+    const data = [];
+
+    for (const line of frame.split("\n")) {
+        if (line.startsWith(":")) continue;
+        if (line.startsWith("event:")) type = line.slice(6).trim();
+        else if (line.startsWith("data:")) data.push(line.slice(5).trim());
+    }
+
+    if (data.length === 0) return null;
+    return { type, data: JSON.parse(data.join("\n")) };
+}
+
+/**
+ * Read `/events` until the connection drops or `signal` aborts.
+ *
+ * Uses `fetch` rather than `EventSource` because the endpoint is authenticated
+ * and `EventSource` cannot send an Authorization header.
+ */
+export async function openSignUpStream({ signal, onEvent }) {
+    const res = await fetch(`${BASE_URL}/events`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+        signal,
+    });
+    if (!res.ok) throw new ApiError(res.status, `Stream failed: ${res.status}`);
+
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) return;
+
+        buffer += value;
+        // A frame ends at a blank line; a read can deliver several, or half of
+        // one, so whatever trails the last separator stays buffered.
+        let boundary;
+        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const parsed = parseFrame(frame);
+            if (parsed) onEvent(parsed);
+        }
+    }
+}
+
 export const login = (email, password) =>
     request("/login", {
         method: "POST",

@@ -1,10 +1,13 @@
-from contextlib import contextmanager
+import asyncio
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
+import json
 import os
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 import bcrypt
@@ -17,13 +20,89 @@ DATABASE_URL = os.environ["NEON_DATABASE"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 ACCESS_TOKEN_EXPIRE_HOURS = 12
 
-app = FastAPI()
+# How long a stream sits idle before emitting a comment frame. Proxies (and
+# Railway's router) drop connections that go quiet, so this keeps them open.
+SSE_KEEPALIVE_SECONDS = 20
+
+# Events buffered per connected dashboard. A client that falls this far behind
+# is treated as desynced and told to refetch rather than served a partial view.
+SSE_QUEUE_SIZE = 64
+
+
+class EventBroker:
+    """Fans out row changes to every connected dashboard.
+
+    Writes happen in sync route handlers, which FastAPI runs in a worker
+    thread, while subscribers live on the event loop — so `publish` is the
+    thread-safe boundary between the two and everything past it is loop-only.
+
+    State is per-process: with more than one server instance, clients only see
+    writes that landed on the instance they are connected to. Moving to
+    Postgres LISTEN/NOTIFY is the fix if this is ever scaled out.
+    """
+
+    def __init__(self) -> None:
+        self._subscribers: set[asyncio.Queue] = set()
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def bind(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
+
+    def publish(self, event_type: str, data: dict) -> None:
+        """Queue an event for every subscriber. Safe to call from any thread."""
+        # No loop bound means nothing can be listening yet (startup, or tests
+        # importing the module), so there is nothing to deliver to.
+        if self._loop is None:
+            return
+        self._loop.call_soon_threadsafe(self._fan_out, event_type, data)
+
+    def _fan_out(self, event_type: str, data: dict) -> None:
+        for queue in self._subscribers:
+            try:
+                queue.put_nowait((event_type, data))
+            except asyncio.QueueFull:
+                # Drop the backlog instead of blocking the writer, and leave a
+                # marker so the client resyncs from scratch on the next read.
+                _drain(queue)
+                queue.put_nowait(("desync", {}))
+
+    @asynccontextmanager
+    async def subscribe(self):
+        queue: asyncio.Queue = asyncio.Queue(maxsize=SSE_QUEUE_SIZE)
+        self._subscribers.add(queue)
+        try:
+            yield queue
+        finally:
+            self._subscribers.discard(queue)
+
+
+def _drain(queue: asyncio.Queue) -> None:
+    while not queue.empty():
+        queue.get_nowait()
+
+
+broker = EventBroker()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    broker.bind(asyncio.get_running_loop())
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # FRONTEND_ORIGIN lets the deployed frontend's URL be set per-environment
 # (e.g. https://mvhs-blood-drive.vercel.app) without hardcoding it here.
 _allowed_origins = ["https://mvhs-blood-drive.vercel.app"]
 if frontend_origin := os.environ.get("FRONTEND_ORIGIN"):
     _allowed_origins.append(frontend_origin)
+
+# Vite's dev server, so a local frontend can reach a local backend without
+# every request failing CORS. Set APP_ENV=production on the deployed instance
+# to leave these out of its allowlist.
+if os.environ.get("APP_ENV") != "production":
+    _allowed_origins += ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -218,6 +297,13 @@ def create_student_sign_up(sign_up: StudentSignUp):
                 sign_up.first_choice, sign_up.second_choice, sign_up.third_choice
             )
         )
+        cur.execute(
+            f"SELECT {SIGN_UP_COLUMNS} FROM sign_ups WHERE id = %s", (new_id,)
+        )
+        created = _row_to_sign_up(cur.fetchone())
+
+    # Lets an open dashboard show the new pending sign-up without a refresh.
+    broker.publish("sign_up.created", created.model_dump())
     return {"id": new_id, **sign_up.model_dump()}
 
 
@@ -233,6 +319,45 @@ def _row_to_sign_up(row) -> SignUpRow:
         age=row[4], email_address=row[5], grade=row[6], confirmed=row[7],
         time_slot=row[8], first_choice=row[9], second_choice=row[10],
         third_choice=row[11],
+    )
+
+
+def _sse_frame(event_type: str, data: dict) -> str:
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+
+@app.get("/events")
+async def stream_events(_: str = Depends(get_current_coordinator)):
+    """Push sign-up changes to open dashboards as Server-Sent Events.
+
+    Authenticated like every other coordinator route, which means the client
+    has to read it with `fetch` — `EventSource` cannot set an Authorization
+    header, and putting the JWT in the query string would log it.
+    """
+
+    async def stream():
+        async with broker.subscribe() as queue:
+            # Lets the client distinguish "connected" from "still dialling".
+            yield _sse_frame("ready", {})
+            while True:
+                try:
+                    event_type, data = await asyncio.wait_for(
+                        queue.get(), timeout=SSE_KEEPALIVE_SECONDS
+                    )
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                yield _sse_frame(event_type, data)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # Tells reverse proxies not to buffer, which would defeat streaming.
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -330,7 +455,12 @@ def confirm_sign_up(
                 WHERE id = %s RETURNING {SIGN_UP_COLUMNS}""",
             (confirmation.time_slot, sign_up_id),
         )
-        return _row_to_sign_up(cur.fetchone())
+        updated = _row_to_sign_up(cur.fetchone())
+
+    # Published outside the block: `db_cursor` commits on exit, so announcing
+    # any earlier would advertise a row that could still roll back.
+    broker.publish("sign_up.updated", updated.model_dump())
+    return updated
 
 
 @app.patch("/sign-ups/{sign_up_id}/unconfirm", response_model=SignUpRow)
@@ -345,7 +475,10 @@ def unconfirm_sign_up(sign_up_id: int, _: str = Depends(get_current_coordinator)
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Sign-up not found")
-        return _row_to_sign_up(row)
+        updated = _row_to_sign_up(row)
+
+    broker.publish("sign_up.updated", updated.model_dump())
+    return updated
 
 
 # Canonical schedule. Mirrors frontend/src/timeSlots.js — keep the two in sync;
@@ -398,4 +531,7 @@ def move_sign_up(
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Sign-up not found")
-        return _row_to_sign_up(row)
+        moved = _row_to_sign_up(row)
+
+    broker.publish("sign_up.updated", moved.model_dump())
+    return moved

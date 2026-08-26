@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "./Header.jsx";
 import Modal from "./Modal.jsx";
 import Spinner from "./Spinner.jsx";
 import PendingSignUps from "./PendingSignUps.jsx";
 import AppointmentTable from "./AppointmentTable.jsx";
+import useSignUpStream from "./useSignUpStream.js";
 import { clearToken } from "./auth.js";
 import { capacityFor, firstOpenSlot, isSlotFull } from "./timeSlots.js";
 import {
@@ -36,6 +37,15 @@ export default function CoordinatorDashboard() {
     const [confirmingSignOut, setConfirmingSignOut] = useState(false);
     const navigate = useNavigate();
 
+    /**
+     * Rows this coordinator is currently changing.
+     *
+     * A pushed update for one of these is ignored: it is either the echo of
+     * this coordinator's own write, or the server's pre-write value arriving
+     * mid-flight. Applying either would snap the row back under their cursor.
+     */
+    const locked = useRef(new Set());
+
     useEffect(() => {
         let cancelled = false;
 
@@ -65,21 +75,57 @@ export default function CoordinatorDashboard() {
     }, []);
 
     /** Swap the updated row in place so the table doesn't refetch and jump. */
-    const applyUpdate = (updated) =>
+    const applyUpdate = (updated) => {
         setSignUps((prev) =>
             prev.map((signUp) => (signUp.id === updated.id ? updated : signUp)),
         );
+        // The local change has landed, so pushed updates may drive it again.
+        locked.current.delete(updated.id);
+    };
+
+    /** Upsert a row pushed from another dashboard. */
+    const applyRemote = useCallback((row) => {
+        if (locked.current.has(row.id)) return;
+        setSignUps((prev) =>
+            prev.some((signUp) => signUp.id === row.id)
+                ? prev.map((signUp) => (signUp.id === row.id ? row : signUp))
+                : [...prev, row],
+        );
+    }, []);
+
+    /** Rebuild from the server after events were missed. */
+    const resync = useCallback(async () => {
+        try {
+            const rows = await listSignUps();
+            setSignUps((prev) =>
+                rows.map((row) =>
+                    locked.current.has(row.id)
+                        ? prev.find((signUp) => signUp.id === row.id) ?? row
+                        : row,
+                ),
+            );
+            setError("");
+        } catch {
+            // Keep showing the last known rows; the next reconnect retries.
+        }
+    }, []);
+
+    useSignUpStream({ onRow: applyRemote, onResync: resync });
 
     /**
      * Only performs the request. The row animates itself out and then calls
      * `applyUpdate`, so committing here would delete it mid-animation.
      */
     const handleConfirm = async (id, timeSlot) => {
+        // Held until `applyUpdate` runs, which is after the row finishes
+        // animating out — not merely when the request returns.
+        locked.current.add(id);
         try {
             const updated = await confirmSignUp(id, timeSlot);
             setError("");
             return updated;
         } catch (err) {
+            locked.current.delete(id);
             // A full slot is a conflict, not a failure — show it as a popup
             // and leave the row in place so another slot can be picked.
             if (err.status === 409) {
@@ -93,11 +139,13 @@ export default function CoordinatorDashboard() {
     };
 
     const handleOverride = async (id, timeSlot) => {
+        locked.current.add(id);
         try {
             const updated = await moveSignUp(id, timeSlot);
             setError("");
             return updated;
         } catch (err) {
+            locked.current.delete(id);
             if (err.status === 409) {
                 setError("");
                 setSlotFullMessage(err.message);
@@ -111,6 +159,7 @@ export default function CoordinatorDashboard() {
     /** Optimistic: the row follows the cursor immediately, reverting on failure. */
     const handleMove = async (id, timeSlot) => {
         const previous = signUps;
+        locked.current.add(id);
         setSignUps((rows) =>
             rows.map((row) =>
                 row.id === id ? { ...row, time_slot: timeSlot } : row,
@@ -121,6 +170,7 @@ export default function CoordinatorDashboard() {
             applyUpdate(await moveSignUp(id, timeSlot));
             setError("");
         } catch (err) {
+            locked.current.delete(id);
             setSignUps(previous);
             // 409 means the server rejected it as full — show that as a dialog
             // rather than an inline error, since the drag visibly snaps back.
@@ -131,10 +181,12 @@ export default function CoordinatorDashboard() {
 
     const handleUnconfirm = async (id) => {
         setBusyId(id);
+        locked.current.add(id);
         try {
             applyUpdate(await unconfirmSignUp(id));
             setError("");
         } catch {
+            locked.current.delete(id);
             setError("Could not move that sign-up back to pending.");
         } finally {
             setBusyId(null);
