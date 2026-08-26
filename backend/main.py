@@ -209,14 +209,6 @@ def read_root():
     return {"message": "MVHS Blood Drive API"}
 
 
-# TEMPORARY — diagnosing a CORS config issue in production, remove once fixed.
-@app.get("/debug/cors")
-def debug_cors():
-    return {
-        "FRONTEND_ORIGIN_raw": os.environ.get("FRONTEND_ORIGIN"),
-        "allowed_origins": _allowed_origins,
-    }
-
 
 @app.post("/login", response_model=Token)
 def login(form: OAuth2PasswordRequestForm = Depends()):
