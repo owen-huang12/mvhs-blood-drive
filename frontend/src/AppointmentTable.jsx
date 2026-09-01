@@ -8,45 +8,6 @@ import {
 
 const DRAG_TYPE = "application/x-signup-id";
 
-/**
- * Replace the drag ghost for a group's first row.
- *
- * That row owns the period cell, which spans the whole group via rowspan, so
- * the browser's default ghost renders as tall as the entire period. The clone
- * keeps the cell but collapses it to a single row, and pins every column to
- * its on-screen width so the ghost lines up with the table underneath it.
- */
-function setRowDragImage(event) {
-    const row = event.currentTarget;
-    const periodCell = row.querySelector(".period-cell");
-    // Rows without a period cell already produce a correct one-row ghost.
-    if (!periodCell) return;
-
-    const clone = row.cloneNode(true);
-    clone.querySelector(".period-cell").rowSpan = 1;
-    Array.from(row.children).forEach((cell, index) => {
-        clone.children[index].style.width = `${cell.offsetWidth}px`;
-    });
-
-    const ghost = document.createElement("table");
-    ghost.className = "appointment-table drag-ghost";
-    ghost.style.width = `${row.offsetWidth}px`;
-    const body = document.createElement("tbody");
-    body.appendChild(clone);
-    ghost.appendChild(body);
-    document.body.appendChild(ghost);
-
-    const rect = row.getBoundingClientRect();
-    event.dataTransfer.setDragImage(
-        ghost,
-        event.clientX - rect.left,
-        event.clientY - rect.top,
-    );
-    // The ghost is snapshotted at the end of this frame, so it can only be
-    // removed once that has happened.
-    requestAnimationFrame(() => ghost.remove());
-}
-
 export default function AppointmentTable({
     signUps,
     onUnconfirm,
@@ -68,15 +29,13 @@ export default function AppointmentTable({
     };
 
     const handleDragStart = (event, id) => {
-        // The period cell belongs to the group, not to this row — dragging it
-        // would silently move whichever row happens to be first in the period.
+        // The period label isn't the drag handle — only the grip/name area is.
         if (event.target.closest?.(".period-cell")) {
             event.preventDefault();
             return;
         }
         event.dataTransfer.setData(DRAG_TYPE, String(id));
         event.dataTransfer.effectAllowed = "move";
-        setRowDragImage(event);
         setDraggingId(id);
     };
 
@@ -131,7 +90,7 @@ export default function AppointmentTable({
                 </thead>
                 <tbody>
                     {groups.map((group) => {
-                        const colors = colorsForPeriod(group.period);
+                        const periodBg = colorsForPeriod(group.period).bg;
                         // "Unscheduled" rows aren't real slots, so nothing may drop there.
                         const droppable = group.period !== "Unscheduled";
 
@@ -166,18 +125,12 @@ export default function AppointmentTable({
                                         droppable ? (e) => handleDrop(e, row.key) : undefined
                                     }
                                 >
-                                    {index === 0 && (
-                                        <td
-                                            className="period-cell"
-                                            rowSpan={group.rows.length}
-                                            style={{
-                                                backgroundColor: colors.bg,
-                                                color: colors.text,
-                                            }}
-                                        >
-                                            {group.period}
-                                        </td>
-                                    )}
+                                    <td
+                                        className="period-cell"
+                                        style={{ backgroundColor: periodBg }}
+                                    >
+                                        {group.period}
+                                    </td>
 
                                     <td className="appointment-time">{row.time}</td>
 
