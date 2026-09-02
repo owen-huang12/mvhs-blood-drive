@@ -27,7 +27,15 @@
   --space-xl: 32px;
 }
 
-html, body { overscroll-behavior: none; scrollbar-width: none; }
+html, body {
+  overscroll-behavior: none;
+  scrollbar-width: none;
+  /* Kills double-tap-to-zoom (and its 300ms click delay). Pinch is blocked
+     in main.jsx, since iOS ignores user-scalable=no. */
+  touch-action: manipulation;
+  /* Stops iOS inflating text when a phone is turned to landscape. */
+  -webkit-text-size-adjust: 100%;
+}
 html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
 
 :focus-visible { outline: 2px solid var(--slate); outline-offset: 2px; }

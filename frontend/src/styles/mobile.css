@@ -1,6 +1,13 @@
 /* ── Mobile ────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
+  /* 16px is the threshold below which iOS Safari zooms the page in when a
+     field is focused. Anything smaller here and tapping an input yanks the
+     layout sideways, which is exactly what it looks like on a phone. */
+  .form-field input,
+  .form-field select,
+  .password-field input { font-size: 16px; }
+
   .header { padding: 14px 20px; }
   .header-icon { height: 40px; }
   .header-title { font-size: 0.95rem; }
