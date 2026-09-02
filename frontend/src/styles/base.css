@@ -43,7 +43,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
 body {
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-weight: 300;
-  background-color: var(--coral-bg);
+  /* Every page container paints --alabaster anyway; body only shows through
+     in the overscroll gutter and behind the browser bars on a phone, where
+     the old dark grey read as a mismatched band. */
+  background-color: var(--alabaster);
   color: #1a1a1a;
   min-height: 100vh;
 }
