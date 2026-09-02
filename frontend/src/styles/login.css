@@ -5,6 +5,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* min-height (not height) means the box grows past the viewport rather than
+     clipping, so a tall card stays scrollable. The padding just keeps it off
+     the very edge when that happens. */
+  padding: 40px 0;
 }
 
 .login-card { width: 100%; max-width: 440px; padding: 0 32px; }

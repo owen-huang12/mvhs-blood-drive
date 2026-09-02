@@ -74,6 +74,36 @@
 .required { color: var(--coral); }
 
 
+/* ── Masked field with a reveal toggle ─────────────────────────────── */
+
+.password-field { position: relative; display: flex; }
+
+/* Room on the right so the text never runs under the button. */
+.password-field input { width: 100%; padding-right: 48px; }
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: #f0eeec;
+  color: #6b6b6b;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.password-toggle:hover { background: #e4e0dd; color: #1a1a1a; }
+
+.password-toggle svg { display: block; width: 17px; height: 17px; }
+
+
 /* ── Parent consent (confirmation page, under-18 donors) ───────────── */
 
 .consent-block {

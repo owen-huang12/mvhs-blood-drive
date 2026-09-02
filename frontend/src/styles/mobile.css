@@ -22,7 +22,19 @@
   .photo-stack { flex-direction: column; }
   .photo-placeholder { height: 180px; }
 
+  /* Auth cards (sign in, coordinator register). The brand block and heading
+     are tightened up to buy back vertical room, since the register form runs
+     taller than a phone screen and scrolls. */
+  .login-page { padding: 28px 0 56px; }
   .login-card { padding: 0 20px; }
+  .login-brand { gap: 12px; margin-bottom: 28px; }
+  .login-icon { height: 44px; }
+  .login-brand-text { font-size: 1.02rem; }
+  .login-heading { font-size: 1.4rem; margin-bottom: 20px; }
+
+  /* Wraps instead of squeezing the button and the text link onto one line. */
+  .login-actions { flex-wrap: wrap; gap: 14px 18px; }
+  .login-actions .submit-btn { padding: 13px 32px; }
 
   /* Preferred time-slot table: shrink first; if a period label (e.g.
      "Period 2/Tutorial") still doesn't fit, scroll inside the table rather
