@@ -135,9 +135,7 @@ export default function AppointmentTable({
                                     <td className="appointment-time">{row.time}</td>
 
                                     {!booked ? (
-                                        <td className="open-label" colSpan={5}>
-                                            Available
-                                        </td>
+                                        <td colSpan={5} />
                                     ) : (
                                         <>
                                             <td className="drag-name">

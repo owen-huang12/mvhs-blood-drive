@@ -1,0 +1,63 @@
+/* Section title bar */
+.section-title {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Antic Slab', serif;
+  font-weight: 600;
+  font-style: italic;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+  background-color: var(--coral);
+  color: #fff;
+  padding: 13px 24px 13px calc(max(0px, (100vw - 860px) / 2) + 24px);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.collapsible-trigger { cursor: pointer; }
+.collapsible-trigger:hover { background-color: #e2544b; }
+
+.collapse-chevron {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #fff;
+  transition: transform 0.25s ease;
+}
+
+.collapse-chevron.open { transform: rotate(180deg); }
+
+.collapsible-content { overflow: hidden; }
+
+/* Body content of a section. `.section-body` is the non-collapsible
+   equivalent of `.collapsible-inner` — both keep the same inset from
+   the coral title bar so every section reads with one rhythm. */
+.collapsible-inner,
+.section-body { padding: var(--space-lg) 0; }
+
+/* Page layout */
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+  background-color: var(--alabaster);
+  min-height: calc(100vh - 88px);
+}
+
+.page .section-title {
+  width: auto;
+  position: static;
+  left: auto;
+  transform: none;
+  padding: 10px 24px;
+  margin-left: -24px;
+  margin-right: -24px;
+}

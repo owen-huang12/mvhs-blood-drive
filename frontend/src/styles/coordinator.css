@@ -1,0 +1,173 @@
+/* ── Coordinator dashboard ─────────────────────────────────────────── */
+
+.dash-section { margin-bottom: var(--space-xl); }
+
+.dash-section:last-child { margin-bottom: 0; }
+
+.dash-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: #1a1a1a;
+  margin-bottom: var(--space-md);
+}
+
+/* Pill counter beside each section heading. */
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  padding: 3px 14px;
+  border-radius: 50px;
+  line-height: 1.5;
+}
+
+.count-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.count-badge.amber { background-color: #FFF; color: #FFC14D; border: 1px solid #FFC14D; }
+.count-badge.green { background-color: #FFF; color: #7CCF74; border: 1px solid #7CCF74; }
+.count-badge.grey {
+  background-color: #FFF;
+  color: #7A736D;
+  border: 1px solid #7A736D;
+}
+
+
+/* ── Pending list ──────────────────────────────────────────────────── */
+
+/* Styled to match .appointment-table below it: a bordered, rounded
+   container with a labeled header row and grey rules between rows
+   instead of a gap-separated stack of cards.
+   No `overflow: hidden` here — the slot-picker dropdown is an absolutely
+   positioned child of a row and needs to escape this box, not be clipped
+   by it. Corners are rounded on the header/last row directly instead. */
+.pending-list {
+  border: 1px solid #e4e0dd;
+  border-radius: 14px;
+  background: #fff;
+}
+
+/* Fixed-width columns (not flex) so the picker lands at the same x
+   position on every row regardless of how long the name is.
+   No `gap` — cells sit flush against each other and are separated by a
+   border instead, like real table columns, so a cell's own background
+   (the time-slot swatch) can reach edge to edge with no whitespace. */
+.pending-header,
+.pending-row {
+  display: grid;
+  grid-template-columns: 1fr 110px 110px 110px 190px 120px;
+  align-items: stretch;
+}
+
+/* Vertical grid lines between columns, to match the horizontal ones
+   between rows. The last column (confirm) gets none — nothing follows it. */
+.pending-header > *:not(:last-child),
+.pending-row > *:not(:last-child) {
+  border-right: 1px solid #f0eeec;
+}
+
+.pending-header {
+  padding: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #6b6b6b;
+  background: #faf9f8;
+  border-bottom: 1px solid #000;
+  border-radius: 14px 14px 0 0;
+}
+
+.pending-header > span {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+/* Sized to match .appointment-table td exactly, so the two tables read
+   as one system. */
+.pending-row {
+  padding: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  border-bottom: 1px solid #f0eeec;
+  transition: background-color 0.15s ease;
+}
+
+.pending-row:last-child {
+  border-bottom: none;
+  border-radius: 0 0 14px 14px;
+}
+
+/* .pending-list has no overflow: hidden (see above), so the last row's
+   own rounded corner won't clip a full-bleed button — round it directly
+   to match, or its square corner pokes past the container's border. */
+.pending-row:last-child .confirm-btn {
+  border-radius: 0 0 14px 0;
+}
+
+.pending-row:hover { background-color: #faf9f8; }
+
+.pending-row .pending-name,
+.pending-row .pending-meta {
+  display: flex;
+  align-items: center;
+  padding: 9px 16px;
+}
+
+/* The time-slot cell has no padding of its own — SlotPicker's trigger
+   fills it completely, so the color swatch reaches every edge instead of
+   floating inside whitespace like a badge. */
+.pending-row .slot-picker { 
+  align-self: stretch; 
+  font-size: 9
+}
+
+/* Fills its grid cell edge to edge, same as .slot-trigger — no cell
+   padding, so the button's own border reaches every edge instead of
+   floating inside whitespace. */
+.pending-row .confirm-cell {
+  align-self: stretch;
+}
+
+/* Flat rectangle, not a pill — reads as a table action, not a badge. */
+.confirm-btn {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.8rem;
+  padding: 7px 22px;
+  border-radius: 0;
+  border: 1.5px solid #cfc9c4;
+  background: #fff;
+  color: #1a1a1a;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.confirm-btn:hover:not(:disabled) { border-color: var(--slate); background-color: #eaf5fc; }
+
+.confirm-btn:disabled { opacity: 0.55; cursor: default; }
+
+.pending-name { 
+  font-weight: 400;
+  color: #1a1a1a; 
+  font-size: 0.8rem
+}
+
+.pending-meta { color: #6b6b6b; font-size: 0.9rem; }
+
+/* Slot picker styles live in slot-picker.css. */

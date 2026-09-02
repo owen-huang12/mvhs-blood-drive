@@ -1,0 +1,15 @@
+/* Header */
+.header {
+  background-color: var(--blush);
+  padding: 18px 48px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-brand { display: flex; align-items: center; gap: 16px; text-decoration: none; }
+.header-icon  { height: 52px; }
+.header-title { font-family: 'Antic Slab', serif; color: #EDE9E9; font-weight: bold; font-style: italic; font-size: 1.1rem; letter-spacing: 0.02em; line-height: 1.4; }

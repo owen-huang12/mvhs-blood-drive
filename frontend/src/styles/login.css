@@ -1,0 +1,41 @@
+/* Login page */
+.login-page {
+  min-height: 100vh;
+  background-color: var(--alabaster);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card { width: 100%; max-width: 440px; padding: 0 32px; }
+
+.login-brand { display: flex; align-items: center; gap: 16px; margin-bottom: 48px; }
+
+.login-icon { height: 52px; }
+
+.login-brand-text { font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif; font-size: 1.15rem; color: #1a1a1a; line-height: 1.4; }
+
+.login-heading { font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif; font-size: 1.6rem; color: #1a1a1a; margin-bottom: 28px; }
+
+.login-form { display: flex; flex-direction: column; gap: 18px; }
+
+.login-actions { display: flex; align-items: center; gap: 20px; margin-top: 8px; }
+
+/* The plain-text action that sits beside the primary button on the auth
+   cards — "Forgot password?" on sign-in, "Back to sign in" on register. */
+.forgot-password-btn,
+.login-link-btn {
+  background: none;
+  border: none;
+  color: var(--coral);
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.forgot-password-btn:hover,
+.login-link-btn:hover { color: var(--blush); }
+
+.login-error { color: var(--red); font-size: 0.9rem; }

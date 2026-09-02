@@ -41,6 +41,24 @@ async function request(path, { method = "GET", body, form, auth = false } = {}) 
 export const signUpStudent = (signUp) =>
     request("/student-sign-up", { method: "POST", body: signUp });
 
+/** Step one of coordinator registration: is this admin code real? */
+export const verifyInviteCode = (inviteCode) =>
+    request("/coordinator/verify-invite", {
+        method: "POST",
+        body: { invite_code: inviteCode },
+    });
+
+export const createCoordinator = ({ fullName, email, password, inviteCode }) =>
+    request("/coordinator", {
+        method: "POST",
+        body: {
+            full_name: fullName,
+            email,
+            password,
+            invite_code: inviteCode,
+        },
+    });
+
 export const getCurrentCoordinator = () => request("/me", { auth: true });
 
 export const listSignUps = () => request("/sign-ups", { auth: true });

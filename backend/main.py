@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import secrets
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -19,6 +20,13 @@ load_dotenv()
 DATABASE_URL = os.environ["NEON_DATABASE"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 ACCESS_TOKEN_EXPIRE_HOURS = 12
+
+# Shared secret handed to coordinators so they can register themselves.
+# Read with .get rather than [] so a missing value fails registration closed
+# (see _assert_invite_code) instead of taking the whole API down at boot.
+COORDINATOR_INVITE_CODE = os.environ.get("COORDINATOR_INVITE_CODE")
+
+MIN_PASSWORD_LENGTH = 8
 
 # How long a stream sits idle before emitting a comment frame. Proxies (and
 # Railway's router) drop connections that go quiet, so this keeps them open.
@@ -121,6 +129,28 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
+
+def _assert_invite_code(code: str) -> None:
+    """Gate coordinator self-registration behind the shared invite code.
+
+    Without this, /coordinator is open to anyone who finds the endpoint — the
+    POST mints accounts and the PUT overwrites an existing coordinator's
+    password by email. compare_digest keeps the check constant-time so the
+    endpoint can't be used to guess the code a character at a time.
+    """
+    if not COORDINATOR_INVITE_CODE:
+        raise HTTPException(
+            status_code=503,
+            detail="Registration is closed. Ask an admin to set an invite code.",
+        )
+    # Stripped so a stray space or newline from copy-pasting the code doesn't
+    # turn a correct code into a confusing 401.
+    if not secrets.compare_digest(code.strip(), COORDINATOR_INVITE_CODE):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="That admin code isn't right.",
+        )
+
 @contextmanager
 def db_cursor(commit: bool = False):
     """Yield a cursor, committing on success and always closing the connection.
@@ -161,10 +191,14 @@ class CoordinatorCreate(BaseModel):
     full_name: str
     email: str
     password: str
+    invite_code: str
 
 class CoordinatorPublic(BaseModel):
     full_name: str
     email: str
+
+class InviteCode(BaseModel):
+    invite_code: str
 
 class Token(BaseModel):
     access_token: str
@@ -213,9 +247,11 @@ def read_root():
 @app.post("/login", response_model=Token)
 def login(form: OAuth2PasswordRequestForm = Depends()):
     with db_cursor() as cur:
+        # Matched case-insensitively, the same way registration checks for an
+        # existing account, so capitalisation can't lock someone out.
         cur.execute(
-            "SELECT password_hash FROM coordinators WHERE email = %s",
-            (form.username,)
+            "SELECT password_hash, email FROM coordinators WHERE LOWER(email) = LOWER(%s)",
+            (form.username.strip(),)
         )
         row = cur.fetchone()
 
@@ -225,7 +261,10 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
             detail="Incorrect email or password",
         )
 
-    token = create_access_token({"sub": form.username})
+    # The subject is the stored email, not what was typed — /me looks the
+    # coordinator up by exact match, so a differently-capitalised login would
+    # otherwise mint a token that resolves to nobody.
+    token = create_access_token({"sub": row[1]})
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -240,19 +279,53 @@ def get_me(email: str = Depends(get_current_coordinator)):
     return CoordinatorPublic(full_name=row[0], email=row[1])
 
 
+@app.post("/coordinator/verify-invite")
+def verify_invite(body: InviteCode):
+    """Check an invite code on its own, so the register page can gate its form.
+
+    This is a convenience for the UI only — /coordinator re-checks the code on
+    the real request, since nothing stops a caller from skipping this step.
+    """
+    _assert_invite_code(body.invite_code)
+    return {"valid": True}
+
+
 @app.post("/coordinator", response_model=CoordinatorPublic)
 def create_coordinator(coordinator: CoordinatorCreate):
+    _assert_invite_code(coordinator.invite_code)
+
+    if len(coordinator.password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
+        )
+
+    email = coordinator.email.strip()
+    full_name = coordinator.full_name.strip()
     hashed = hash_password(coordinator.password)
+
     with db_cursor(commit=True) as cur:
+        # The table has a unique constraint on email; checking first turns what
+        # would be a 500 from the constraint into a message the page can show.
+        # Case-insensitive so one person can't end up with Foo@ and foo@
+        # accounts — /login matches the same way.
+        cur.execute("SELECT 1 FROM coordinators WHERE LOWER(email) = LOWER(%s)", (email,))
+        if cur.fetchone() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="An account already exists for that email.",
+            )
+
         cur.execute(
             "INSERT INTO coordinators (full_name, email, password_hash) VALUES (%s, %s, %s)",
-            (coordinator.full_name, coordinator.email, hashed)
+            (full_name, email, hashed)
         )
-    return CoordinatorPublic(full_name=coordinator.full_name, email=coordinator.email)
+    return CoordinatorPublic(full_name=full_name, email=email)
 
 
 @app.put("/coordinator", response_model=CoordinatorPublic)
 def update_coordinator(coordinator: CoordinatorCreate):
+    _assert_invite_code(coordinator.invite_code)
     hashed = hash_password(coordinator.password)
     with db_cursor(commit=True) as cur:
         cur.execute(
@@ -267,9 +340,42 @@ def update_coordinator(coordinator: CoordinatorCreate):
     return CoordinatorPublic(full_name=coordinator.full_name, email=coordinator.email)
 
 
+MIN_SIGN_UP_AGE = 16
+
+
 @app.post('/student-sign-up')
 def create_student_sign_up(sign_up: StudentSignUp):
+    if sign_up.age < MIN_SIGN_UP_AGE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Must be at least {MIN_SIGN_UP_AGE} years old to sign up.",
+        )
+
+    email_address = sign_up.email_address.strip()
+    student_id = sign_up.student_id.strip()
+
     with db_cursor(commit=True) as cur:
+        # One sign-up per person: a repeat is nearly always a double submit or
+        # someone refilling the form, not a second donor. Email is matched
+        # case-insensitively since Foo@ and foo@ reach the same inbox, and
+        # student ID is checked too so a second email can't get round it.
+        cur.execute(
+            "SELECT 1 FROM sign_ups WHERE LOWER(email_address) = LOWER(%s)",
+            (email_address,),
+        )
+        if cur.fetchone() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="A sign-up already exists for that email address.",
+            )
+
+        cur.execute("SELECT 1 FROM sign_ups WHERE student_id = %s", (student_id,))
+        if cur.fetchone() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="A sign-up already exists for that student ID.",
+            )
+
         # NOTE: races with concurrent signups. Fix is an identity column on id.
         cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM sign_ups")
         new_id = cur.fetchone()[0]
@@ -283,8 +389,8 @@ def create_student_sign_up(sign_up: StudentSignUp):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                new_id, sign_up.full_name, sign_up.is_student, sign_up.student_id,
-                sign_up.age, datetime.now(timezone.utc), sign_up.email_address,
+                new_id, str.capitalize(sign_up.full_name), sign_up.is_student, student_id,
+                sign_up.age, datetime.now(timezone.utc), email_address,
                 sign_up.grade, sign_up.confirmed, sign_up.first_choice,
                 sign_up.first_choice, sign_up.second_choice, sign_up.third_choice
             )
@@ -296,7 +402,9 @@ def create_student_sign_up(sign_up: StudentSignUp):
 
     # Lets an open dashboard show the new pending sign-up without a refresh.
     broker.publish("sign_up.created", created.model_dump())
-    return {"id": new_id, **sign_up.model_dump()}
+    # The stored row rather than the submitted one, so the response reflects
+    # the name and email as actually saved (capitalised, trimmed).
+    return created
 
 
 SIGN_UP_COLUMNS = """

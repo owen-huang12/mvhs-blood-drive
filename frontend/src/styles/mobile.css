@@ -1,0 +1,50 @@
+/* ── Mobile ────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .header { padding: 14px 20px; }
+  .header-icon { height: 40px; }
+  .header-title { font-size: 0.95rem; }
+
+  .page {
+    padding: 0 16px 64px;
+    min-height: calc(100vh - 76px);
+  }
+  .page .section-title { margin-left: -16px; margin-right: -16px; padding: 10px 16px; }
+
+  .home-page { padding: 0 20px 64px; height: calc(100vh - 76px); }
+  .home-page .section-title { margin-left: -20px; margin-right: -20px; padding: 12px 20px; }
+
+  .home-hero { height: calc(100vh - 76px - 84px); }
+
+  .signup-cta { bottom: 20px; padding: 8px 16px 8px 8px; font-size: 0.9rem; }
+  .cta-arrow { width: 36px; height: 36px; font-size: 1.1rem; }
+
+  .photo-stack { flex-direction: column; }
+  .photo-placeholder { height: 180px; }
+
+  .login-card { padding: 0 20px; }
+
+  /* Preferred time-slot table: shrink first; if a period label (e.g.
+     "Period 2/Tutorial") still doesn't fit, scroll inside the table rather
+     than break the page width. */
+  .timeslot-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .timeslot-table th,
+  .timeslot-table td { padding: 9px 12px; font-size: 0.85rem; }
+  .timeslot-period { font-size: 0.68rem; padding: 3px 8px; }
+  .timeslot-choice-col { width: 64px; }
+
+  /* Coordinator dashboard: the pending-row grid and appointment table are
+     fixed-width layouts built for desktop review, not full reflow — so on
+     phone they scroll horizontally inside their own box instead of
+     squeezing (and breaking) the page. */
+  .dashboard-body { padding: 24px 16px; }
+  .dashboard-section-title { padding: 12px 16px; }
+  .profile-name { display: none; }
+
+  .pending-list { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .pending-row { min-width: 720px; }
+
+  .appointment-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .slot-panel { width: 240px; max-width: calc(100vw - 32px); }
+}

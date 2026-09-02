@@ -1,0 +1,218 @@
+/* Form */
+/* Section-to-section rhythm: one value everywhere, so collapsed and
+   expanded sections stack with the same gap. */
+.form-section { margin-top: var(--space-lg); }
+
+.form-prompt { font-size: 1rem; margin-bottom: var(--space-lg); color: #5f5a56; line-height: 1.65; }
+
+.signup-form { display: flex; flex-direction: column; gap: var(--space-lg); }
+
+.form-field { display: flex; flex-direction: column; gap: var(--space-sm); margin-bottom: var(--space-lg); }
+
+.form-field:last-child { margin-bottom: 0; }
+
+.form-field label,
+.form-field-label {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: #6b6b6b;
+  letter-spacing: 0.02em;
+}
+
+.grade-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.grade-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.98rem;
+  color: #1a1a1a;
+  cursor: pointer;
+  padding: 10px 18px;
+  background: #fff;
+  border: 1px solid #e4e0dd;
+  border-radius: 12px;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.grade-radio:hover { border-color: #cfc9c4; }
+
+.grade-radio:has(input:checked) {
+  border-color: var(--slate);
+  background-color: #eaf5fc;
+}
+
+/* Custom radio: `accent-color` keeps the native ring-and-dot rendering,
+   so draw our own — a hairline circle that fills solid when checked. */
+.grade-radio input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  /* Must reset: `.form-field input` sets padding, which would otherwise
+     inflate the box past its 15px width and render an oval. */
+  padding: 0;
+  border: 1px solid #cfc9c4;
+  border-radius: 50%;
+  background-color: #fff;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.grade-radio input[type="radio"]:checked {
+  background-color: var(--slate);
+  border-color: var(--slate);
+}
+
+.required { color: var(--coral); }
+
+
+/* ── Parent consent (confirmation page, under-18 donors) ───────────── */
+
+.consent-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.consent-prompt {
+  font-size: 1rem;
+  color: #1a1a1a;
+  line-height: 1.65;
+}
+
+/* Same card-with-a-control shape as .grade-radio, so the two read as one
+   family. Wrapped in the label so the text is part of the hit area. */
+.consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  max-width: 620px;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: #1a1a1a;
+  cursor: pointer;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid #e4e0dd;
+  border-radius: 12px;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.consent-check:hover { border-color: #cfc9c4; }
+
+.consent-check:has(input:checked) {
+  border-color: var(--slate);
+  background-color: #eaf5fc;
+}
+
+/* Drawn rather than accent-coloured, to match the custom radios above. The
+   tick is a background image because ::after on a replaced element is not
+   dependable across browsers. */
+.consent-check input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  /* Nudged down so the box aligns with the first line of text, not its box. */
+  margin: 3px 0 0;
+  border: 1px solid #cfc9c4;
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.consent-check input[type="checkbox"]:checked {
+  background-color: var(--slate);
+  border-color: var(--slate);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3L12.5 5'/%3E%3C/svg%3E");
+  background-size: 11px 11px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Outlined rather than solid: the coral fill is reserved for the primary
+   action on the page ("Back to home"). */
+.consent-form-link {
+  display: inline-block;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.95rem;
+  text-decoration: none;
+  padding: 11px 26px;
+  color: var(--coral);
+  background: #fff;
+  border: 1.5px solid var(--coral);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.consent-form-link:hover { background-color: var(--coral); color: #fff; }
+
+/* Confirm sits beside a plain-text escape hatch back to the form. */
+.confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.form-field input,
+.form-field select {
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.9rem;
+  padding: 13px 16px;
+  border: 1px solid #e4e0dd;
+  border-radius: 12px;
+  background: #fff;
+  color: #1a1a1a;
+  outline: none;
+  font-weight: 400;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.form-field input::placeholder { color: #b3aca7; }
+
+.form-field input:hover,
+.form-field select:hover { border-color: #cfc9c4; }
+
+.form-field input:focus,
+.form-field select:focus {
+  border-color: var(--coral);
+  box-shadow: 0 0 0 3px rgba(240, 96, 86, 0.12);
+}
+
+.submit-btn {
+  display: inline-block;
+  margin-top: var(--space-sm);
+  align-self: flex-start;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 1rem;
+  text-decoration: none;
+  padding: 13px 40px;
+  background-color: var(--coral);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background-color: #e2544b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(240, 96, 86, 0.25);
+}
+
+.submit-btn:disabled { opacity: 0.6; cursor: default; }

@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import CollapsibleSection from "./CollapsibleSection.jsx";
-import { signUpStudent } from "./api.js";
 import {
     CHOICE_LABELS,
     REQUIRED_CHOICES,
@@ -11,6 +10,7 @@ import {
 } from "./timeSlots.js";
 
 const GRADES = ["9th", "10th", "11th", "12th"];
+const MIN_AGE = 16;
 
 /** Labelled required text input — the shape every field on this form takes. */
 function Field({ id, label, value, onChange, ...inputProps }) {
@@ -31,14 +31,21 @@ function Field({ id, label, value, onChange, ...inputProps }) {
 }
 
 export default function StudentPersonalInfo() {
-    const [name, setName] = useState("");
-    const [studentId, setStudentId] = useState("");
-    const [age, setAge] = useState("");
-    const [email, setEmail] = useState("");
-    const [grade, setGrade] = useState("");
-    const [selectedSlots, setSelectedSlots] = useState([]);
+    // Sent back by the confirm screen when the sign-up was rejected there (a
+    // duplicate email, say), so a fixable mistake doesn't cost the whole form.
+    const prior = useLocation().state?.signUp;
+
+    const [name, setName] = useState(prior?.full_name ?? "");
+    const [studentId, setStudentId] = useState(prior?.student_id ?? "");
+    const [age, setAge] = useState(prior?.age != null ? String(prior.age) : "");
+    const [email, setEmail] = useState(prior?.email_address ?? "");
+    const [grade, setGrade] = useState(prior?.grade ?? "");
+    const [selectedSlots, setSelectedSlots] = useState(() =>
+        [prior?.first_choice, prior?.second_choice, prior?.third_choice].filter(
+            Boolean
+        )
+    );
     const [error, setError] = useState("");
-    const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
 
     const toggleTimeSlot = (slotKey) => {
@@ -48,7 +55,7 @@ export default function StudentPersonalInfo() {
         });
     };
 
-    const handleSubmit = async (event) => {
+    const handleSubmit = (event) => {
         event.preventDefault();
 
         if (selectedSlots.length !== REQUIRED_CHOICES) {
@@ -56,29 +63,32 @@ export default function StudentPersonalInfo() {
             return;
         }
 
+        if (Number(age) < MIN_AGE) {
+            setError(`You must be at least ${MIN_AGE} years old to sign up.`);
+            return;
+        }
+
         setError("");
-        setSubmitting(true);
 
         // Already stored as "<period> - <time>" by formatSlot.
         const [first_choice, second_choice, third_choice] = selectedSlots;
 
-        try {
-            await signUpStudent({
-                full_name: name,
-                student_id: studentId,
-                age: Number(age),
-                email_address: email,
-                grade,
-                first_choice,
-                second_choice,
-                third_choice,
-            });
-            navigate("/completed", { replace: true, state: { email } });
-        } catch {
-            setError("Something went wrong submitting your registration. Please try again.");
-        } finally {
-            setSubmitting(false);
-        }
+        // Nothing is saved yet — the confirm screen posts this once they have
+        // confirmed, and (under 18) acknowledged the parent consent form.
+        navigate("/completed", {
+            state: {
+                signUp: {
+                    full_name: name,
+                    student_id: studentId,
+                    age: Number(age),
+                    email_address: email,
+                    grade,
+                    first_choice,
+                    second_choice,
+                    third_choice,
+                },
+            },
+        });
     };
 
     return (
@@ -129,7 +139,7 @@ export default function StudentPersonalInfo() {
                             id="age"
                             label="Age"
                             type="number"
-                            min="1"
+                            min={MIN_AGE}
                             value={age}
                             onChange={setAge}
                         />
@@ -229,8 +239,8 @@ export default function StudentPersonalInfo() {
 
                     {error && <p className="login-error">{error}</p>}
 
-                    <button type="submit" className="submit-btn" disabled={submitting}>
-                        {submitting ? "Registering…" : "Register"}
+                    <button type="submit" className="submit-btn">
+                        Review &amp; Register
                     </button>
                 </form>
             </section>

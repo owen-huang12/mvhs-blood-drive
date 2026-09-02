@@ -1,0 +1,117 @@
+/* ── Slot picker ───────────────────────────────────────────────────── */
+
+.slot-picker { position: relative; }
+
+/* Fills its grid cell edge to edge — square corners, full height/width,
+   same text size as the rest of .pending-row — so the color reads as a
+   table cell's own background, not a badge floating in whitespace. */
+.slot-trigger {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 400;
+  padding: 0 16px;
+  border-radius: 0;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+/* Unpicked: a plain white box, so an unassigned row is obvious at a glance. */
+.slot-trigger.is-empty {
+  background: #fff;
+  color: #9a938d;
+  border-color: #ddd8d4;
+}
+
+.slot-trigger.is-empty:hover { border-color: #b9b2ac; color: #6b6b6b; }
+
+.slot-trigger:disabled { opacity: 0.6; cursor: default; }
+
+.slot-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: 260px;
+  padding: var(--space-md);
+  background: #fff;
+  border: 1px solid #1a1a1a;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+
+.slot-panel-section { display: flex; flex-direction: column; gap: var(--space-sm); }
+
+.slot-choice-row { display: flex; align-items: center; gap: var(--space-sm); }
+
+.slot-choice-label {
+  width: 30px;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: #6b6b6b;
+  text-align: right;
+}
+
+.slot-pill {
+  flex: 1;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  border-radius: 50px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slot-pill:not(.is-full):hover { filter: brightness(0.96); }
+
+.slot-pill.is-selected { box-shadow: 0 0 0 2px var(--slate); }
+
+/* Full slot: shaded, inert, and explicitly no hover response. */
+.slot-pill.is-full {
+  background: #F2F0EE;
+  color: #b3aca7;
+  border-color: #e4e0dd;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.slot-pill.is-full:hover { filter: none; }
+
+.slot-panel-note {
+  margin-top: var(--space-sm);
+  font-size: 0.78rem;
+  color: #b4761f;
+  line-height: 1.45;
+}
+
+.slot-panel-divider {
+  height: 1px;
+  background: #ece9e7;
+  margin: var(--space-md) 0 var(--space-sm);
+}
+
+.slot-panel-heading {
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  color: #8a837d;
+  margin-bottom: var(--space-sm);
+}
+
+.slot-panel-all {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 190px;
+  overflow-y: auto;
+}

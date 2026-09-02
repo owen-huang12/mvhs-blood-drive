@@ -1,0 +1,39 @@
+/* ── Loading spinner ───────────────────────────────────────────────── */
+
+.spinner-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 56px 0;
+}
+
+.spinner {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  animation: spinner-rotate 1s steps(var(--total, 8)) infinite;
+}
+
+.spinner-dot {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background-color: var(--coral);
+  /* Fan the dots around the ring, fading each one further back. */
+  transform: rotate(calc(var(--i) * (360deg / var(--total)))) translateY(14.5px);
+  transform-origin: 50% 17px;
+  opacity: calc(0.15 + (var(--i) / var(--total)) * 0.85);
+}
+
+@keyframes spinner-rotate { to { transform: rotate(360deg); } }
+
+.spinner-label { color: #8a837d; font-size: 0.9rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 3s; }
+}

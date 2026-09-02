@@ -41,15 +41,15 @@ export const TIME_SLOTS = [
  * Every pairing below clears WCAG AA (4.5:1) for body text.
  */
 export const PERIOD_COLORS = {
-    "Period 2": { bg: "#F5F1DC", text: "#71642A" },
-    "Period 2/Tutorial": { bg: "#F4E6D7", text: "#87582F" },
-    "Tutorial": { bg: "#F2E0E0", text: "#8B4B4B" },
-    "Brunch/Period 4": { bg: "#EEDFEC", text: "#79477A" },
-    "Period 4": { bg: "#E3DEF0", text: "#584C92" },
-    "Period 4/Lunch": { bg: "#DBE2F1", text: "#3D5482" },
-    "Lunch": { bg: "#D9E6EC", text: "#2C5C71" },
-    "Lunch/Period 6": { bg: "#D8E9E5", text: "#2A6D5E" },
-    "Period 6": { bg: "#DDEAD9", text: "#3C6A3D" },
+    "Period 2": { bg: "#B8D8D8", text: "#131211" },
+    "Period 2/Tutorial": { bg: "#c7dbdd", text: "#131211" },
+    "Tutorial": { bg: "#EEF5DB", text: "#131211" },
+    "Brunch/Period 4": { bg: "#DEDDF8", text: "#131211" },
+    "Period 4": { bg: "#EFE4F1", text: "#131211" },
+    "Period 4/Lunch": { bg: "#EDD3E2", text: "#131211" },
+    "Lunch": { bg: "#DDEAD9", text: "#131211" },
+    "Lunch/Period 6": { bg: "#FFFBE9", text: "#131211" },
+    "Period 6": { bg: "#FFEEE9", text: "#131211" },
 };
 
 export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];

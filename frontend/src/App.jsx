@@ -6,6 +6,7 @@ import HomePage from "./HomePage.jsx";
 import StudentPersonalInfo from "./StudentPersonalInfo.jsx";
 import CompletedStudentForm from "./CompletedStudentForm.jsx";
 import CoordinatorsPage from "./CoordinatorsPage.jsx";
+import CoordinatorRegisterPage from "./CoordinatorRegisterPage.jsx";
 import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
 import RequireAuth from "./RequireAuth.jsx";
 
@@ -24,6 +25,11 @@ export default function App() {
         <BrowserRouter>
             <Routes>
                 <Route path="/coordinators" element={<CoordinatorsPage />} />
+                {/* Unlinked on purpose — the URL goes out to invitees only. */}
+                <Route
+                    path="/coordinators/register"
+                    element={<CoordinatorRegisterPage />}
+                />
                 <Route
                     path="/coordinators/dashboard"
                     element={

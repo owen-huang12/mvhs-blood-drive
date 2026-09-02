@@ -38,9 +38,8 @@ function PendingRow({
     // Nothing is preselected — the coordinator picks. The one exception is
     // when every choice is full, where we fall back to the earliest opening.
     const [picked, setPicked] = useState("");
-    const [status, setStatus] = useState("idle"); // idle | saving | done
+    const [saving, setSaving] = useState(false);
     const rowRef = useRef(null);
-    const pillRef = useRef(null);
 
     const allChoicesFull = choices.length > 0 && choices.every(isSlotFull);
     const autoAssigned = !picked && allChoicesFull && Boolean(earliestOpen);
@@ -53,28 +52,19 @@ function PendingRow({
     // instead, same as drag-and-drop.
     const isOverride = Boolean(slot) && !choices.includes(slot);
 
-    const busy = status !== "idle";
-
     async function handleConfirm() {
         if (!slot) return;
-        setStatus("saving");
+        setSaving(true);
         let updated;
         try {
             updated = isOverride
                 ? await onOverride(signUp.id, slot)
                 : await onConfirm(signUp.id, slot);
         } catch {
-            setStatus("idle");
+            setSaving(false);
             return;
         }
 
-        // Flip the pill to green, let it land, then collapse the row away.
-        setStatus("done");
-        await run(pillRef.current, {
-            scale: [1, 1.14, 1],
-            duration: 420,
-            ease: "outBack",
-        });
         await collapseRow(rowRef.current);
         onCommit(updated);
     }
@@ -82,38 +72,32 @@ function PendingRow({
     return (
         <div className="pending-row" ref={rowRef}>
             <span className="pending-name">{signUp.full_name}</span>
+            <span className="pending-meta">{signUp.student_id}</span>
             <span className="pending-meta">
                 {signUp.is_student ? "Student" : "Teacher"}
             </span>
-            <span className="pending-meta">{signUp.student_id}</span>
-            <span className="pending-meta">Age: {signUp.age}</span>
+            <span className="pending-meta">{signUp.age}</span>
 
-            <span className="pending-slot-label">Time Slot:</span>
             <SlotPicker
                 choices={choices}
                 value={slot}
                 onChange={setPicked}
                 isFull={isSlotFull}
                 autoAssigned={autoAssigned}
-                disabled={busy}
+                disabled={saving}
             />
-
-            <button
-                type="button"
-                className="confirm-btn"
-                onClick={handleConfirm}
-                disabled={busy || !slot}
-                title={slot ? undefined : "Pick a time slot first"}
-            >
-                {status === "saving" ? "confirming…" : "confirm"}
-            </button>
-
-            <span
-                ref={pillRef}
-                className={`status-pill ${status === "done" ? "done" : "awaiting"}`}
-            >
-                {status === "done" ? "confirmed" : "awaiting confirmation"}
-            </span>
+            
+            <div className="confirm-cell">
+                <button
+                    type="button"
+                    className="confirm-btn"
+                    onClick={handleConfirm}
+                    disabled={saving || !slot}
+                    title={slot ? undefined : "Pick a time slot first"}
+                >
+                    {saving ? "confirming…" : "confirm"}
+                </button>
+            </div>
         </div>
     );
 }
@@ -137,6 +121,14 @@ export default function PendingSignUps({
                 <p className="empty-state">Nothing awaiting confirmation.</p>
             ) : (
                 <div className="pending-list">
+                    <div className="pending-header" aria-hidden="true">
+                        <span>Full Name</span>
+                        <span>Student ID</span>
+                        <span>Status</span>
+                        <span>Age</span>
+                        <span>Time Slot</span>
+                        <span />
+                    </div>
                     {signUps.map((signUp) => (
                         <PendingRow
                             key={signUp.id}

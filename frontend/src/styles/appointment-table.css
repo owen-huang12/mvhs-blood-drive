@@ -1,0 +1,151 @@
+/* ── Appointment table ─────────────────────────────────────────────── */
+
+.appointment-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.92rem;
+  background: #fff;
+  border: 1px solid #e4e0dd;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.appointment-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #6b6b6b;
+  background: #faf9f8;
+  border-bottom: 1px solid #000;
+}
+
+.appointment-table td {
+  padding: 9px 16px;
+  border-bottom: 1px solid #f0eeec;
+  color: #1a1a1a;
+  line-height: 1.5;
+}
+
+.appointment-table tr:last-child td { border-bottom: none; }
+
+/* Heavier rule where one period ends and the next begins. */
+.appointment-table tr.period-start:not(:first-child) td {
+  border-top: 1px solid #000;
+}
+
+.period-cell {
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: #6b6b6b;
+  border-right: 1px solid #eceae8;
+  white-space: nowrap;
+}
+
+.appointment-time { color: #5f5a56; white-space: nowrap; }
+
+.status-cell { text-align: center; font-size: 0.85rem; white-space: nowrap; }
+
+.appointment-email { color: #5f5a56; }
+
+.appointment-actions { width: 1%; }
+
+.unconfirm-btn {
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.8rem;
+  color: #9a938d;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.appointment-table tr:hover .unconfirm-btn { opacity: 1; }
+
+.unconfirm-btn:hover:not(:disabled) { color: var(--red); }
+
+.unconfirm-btn:disabled { opacity: 0.5; cursor: default; }
+
+.unconfirm-btn:focus-visible { opacity: 1; }
+
+/* Unfilled spreadsheet slots — visible but recessive, so booked rows lead.
+   The dot grid alone reads as "empty" at a glance. */
+.appointment-table tr.slot-open td:not(.period-cell) {
+  background-color: #fcfbfa;
+  background-image: radial-gradient(circle, #c9c3bd 1px, transparent 1px);
+  background-size: 9px 9px;
+}
+
+.appointment-table tr.slot-open .appointment-time { color: #9a938d; }
+
+/* ── Drag and drop (appointment slotting) ──────────────────────────── */
+
+/* The whole row is the handle. Suppressing selection across all of it is what
+   makes that possible — otherwise a drag beginning on a text cell smears a
+   selection highlight instead of picking the row up. */
+.appointment-table tr[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.appointment-table tr[draggable="true"]:active { cursor: grabbing; }
+
+/* The period cell spans the group, so it is the one part of the row that does
+   not drag; it should not advertise a grab cursor. */
+.appointment-table tr[draggable="true"] .period-cell { cursor: default; }
+
+/* Buttons keep their own affordance rather than inheriting the grab cursor. */
+.appointment-table tr[draggable="true"] button { cursor: pointer; }
+
+.drag-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Off-screen stand-in used as the drag ghost; see setRowDragImage. */
+.drag-ghost {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  table-layout: fixed;
+  pointer-events: none;
+}
+
+.drag-grip {
+  color: #cfc9c4;
+  font-size: 0.9rem;
+  line-height: 1;
+  letter-spacing: -1px;
+  transition: color 0.15s ease;
+}
+
+.appointment-table tr:hover .drag-grip { color: #9a938d; }
+
+/* Exclude the period cell: it spans the whole group via rowspan, so
+   styling it here bleeds the highlight across the entire period. */
+.appointment-table tr.row-dragging td:not(.period-cell) { opacity: 0.4; }
+
+/* Destination slot under the cursor. Clears the slot-open dot grid so the
+   drop highlight reads as a solid color, not a dotted one. */
+.appointment-table tr.row-drop td:not(.period-cell) {
+  background-color: #E8F4FC;
+  background-image: none;
+  box-shadow: inset 0 2px 0 var(--slate);
+}
+
+/* Destination slot that has no room left. */
+/* Strong red so a blocked drop can't be mistaken for Tutorial's pink. */
+.appointment-table tr.row-drop-blocked td:not(.period-cell) {
+  background-color: #F6D2CE;
+  background-image: none;
+  box-shadow: inset 0 2px 0 var(--red);
+  cursor: not-allowed;
+}
