@@ -389,7 +389,7 @@ def create_student_sign_up(sign_up: StudentSignUp):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                new_id, str.capitalize(sign_up.full_name), sign_up.is_student, student_id,
+                new_id, str.title(sign_up.full_name), sign_up.is_student, student_id,
                 sign_up.age, datetime.now(timezone.utc), email_address,
                 sign_up.grade, sign_up.confirmed, sign_up.first_choice,
                 sign_up.first_choice, sign_up.second_choice, sign_up.third_choice
