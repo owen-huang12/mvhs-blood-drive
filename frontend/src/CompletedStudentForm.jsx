@@ -27,7 +27,7 @@ export default function CompletedStudentForm() {
     // Reached without going through the form (direct URL, cleared history):
     // there is nothing to confirm, so send them back to sign up.
     if (!signUp) {
-        return <Navigate to="/signup" replace />;
+        return <Navigate to="/signup/student" replace />;
     }
 
     const needsConsentForm = signUp.age < CONSENT_REQUIRED_UNDER;
@@ -129,7 +129,7 @@ export default function CompletedStudentForm() {
                             type="button"
                             className="login-link-btn"
                             onClick={() =>
-                                navigate("/signup", { state: { signUp } })
+                                navigate("/signup/student", { state: { signUp } })
                             }
                         >
                             Go back and edit

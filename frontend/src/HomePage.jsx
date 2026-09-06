@@ -1,6 +1,6 @@
-import { Link } from "react-router-dom";
 import CollapsibleSection from "./CollapsibleSection.jsx";
 import HomeHero from "./HomeHero.jsx";
+import SignUpCta from "./SignUpCta.jsx";
 import placeholder1 from "./assets/placeholder_1.png";
 import placeholder2 from "./assets/placeholder_2.png";
 
@@ -45,10 +45,8 @@ export default function HomePage() {
                 </div>
             </CollapsibleSection>
 
-            <Link to="/signup" className="signup-cta">
-                <span className="cta-arrow">&#8594;</span>
-                <span>Sign up for the<br />8/12 blood drive</span>
-            </Link>
+            {/* Opens into the three participant routes on hover. */}
+            <SignUpCta />
         </main>
     );
 }

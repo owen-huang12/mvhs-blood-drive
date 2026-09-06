@@ -23,8 +23,11 @@
 
   .home-hero { height: calc(100vh - 76px - 84px); }
 
-  .signup-cta { bottom: 20px; padding: 8px 16px 8px 8px; font-size: 0.9rem; }
+  /* `bottom` sits on the wrapper, which is the positioned element. */
+  .signup-cta-wrap { bottom: 20px; }
+  .signup-cta { padding: 8px 16px 8px 8px; font-size: 0.9rem; }
   .cta-arrow { width: 36px; height: 36px; font-size: 1.1rem; }
+  .signup-cta-option { font-size: 0.9rem; padding: 9px 16px; }
 
   .photo-stack { flex-direction: column; }
   .photo-placeholder { height: 180px; }

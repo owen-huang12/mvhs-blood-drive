@@ -1,13 +1,9 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import BloodDriveOverview from "./BloodDriveOverview.jsx";
 import CollapsibleSection from "./CollapsibleSection.jsx";
-import {
-    CHOICE_LABELS,
-    REQUIRED_CHOICES,
-    TIME_SLOTS,
-    colorsForPeriod,
-    formatSlot,
-} from "./timeSlots.js";
+import TimeSlotChoices from "./TimeSlotChoices.jsx";
+import { REQUIRED_CHOICES } from "./timeSlots.js";
 
 const GRADES = ["9th", "10th", "11th", "12th"];
 const MIN_AGE = 16;
@@ -48,13 +44,6 @@ export default function StudentPersonalInfo() {
     const [error, setError] = useState("");
     const navigate = useNavigate();
 
-    const toggleTimeSlot = (slotKey) => {
-        setSelectedSlots((prev) => {
-            if (prev.includes(slotKey)) return prev.filter((k) => k !== slotKey);
-            return prev.length >= REQUIRED_CHOICES ? prev : [...prev, slotKey];
-        });
-    };
-
     const handleSubmit = (event) => {
         event.preventDefault();
 
@@ -93,25 +82,7 @@ export default function StudentPersonalInfo() {
 
     return (
         <main className="page">
-            <CollapsibleSection title="Overview of the Stanford Blood Drive">
-                <div className="overview-text">
-                    <p>
-                        Lorem ipsum dolor sit amet consectetur adipiscing elit.
-                        Quisque faucibus ex sapien vitae pellentesque sem
-                        placerat. In id cursus mi pretium tellus duis convallis.
-                        Tempus leo eu aenean sed diam urna tempor. Pulvinar
-                        vivamus fringilla lacus nec metus bibendum egestas.
-                        Iaculis massa nisl malesuada lacinia integer nunc
-                        posuere.
-                    </p>
-                    <p>
-                        Lorem ipsum dolor sit amet consectetur adipiscing elit.
-                        Quisque faucibus ex sapien vitae pellentesque sem
-                        placerat. In id cursus mi pretium tellus duis convallis.
-                        Tempus leo eu aenean sed diam urna tempor.
-                    </p>
-                </div>
-            </CollapsibleSection>
+            <BloodDriveOverview />
 
             <section className="form-section">
                 <form className="signup-form" onSubmit={handleSubmit}>
@@ -173,68 +144,10 @@ export default function StudentPersonalInfo() {
                     </CollapsibleSection>
 
                     <CollapsibleSection as="div" title="Preferred time slot">
-                        <p className="form-prompt">
-                            Please select exactly {REQUIRED_CHOICES} of your
-                            preferred time slots, in order of preference. The
-                            order you click them in sets your 1st, 2nd, and 3rd
-                            choice.
-                        </p>
-
-                        <table className="timeslot-table">
-                            <thead>
-                                <tr>
-                                    <th>Period</th>
-                                    <th>Time slot</th>
-                                    <th className="timeslot-choice-col">Your choice</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {TIME_SLOTS.map((slot) => {
-                                    const slotKey = formatSlot(slot);
-                                    const rank = selectedSlots.indexOf(slotKey);
-                                    const isSelected = rank !== -1;
-                                    const colors = colorsForPeriod(slot.period);
-                                    const select = () => toggleTimeSlot(slotKey);
-
-                                    return (
-                                        <tr
-                                            key={slotKey}
-                                            className={`timeslot-row${isSelected ? " selected" : ""}`}
-                                            role="button"
-                                            aria-pressed={isSelected}
-                                            tabIndex={0}
-                                            onClick={select}
-                                            onKeyDown={(e) => {
-                                                if (e.key === "Enter" || e.key === " ") {
-                                                    e.preventDefault();
-                                                    select();
-                                                }
-                                            }}
-                                        >
-                                            <td>
-                                                <span
-                                                    className="timeslot-period"
-                                                    style={{
-                                                        backgroundColor: colors.bg,
-                                                        color: colors.text,
-                                                    }}
-                                                >
-                                                    {slot.period}
-                                                </span>
-                                            </td>
-                                            <td className="timeslot-time">{slot.time}</td>
-                                            <td className="timeslot-choice-col">
-                                                {isSelected && (
-                                                    <span className="timeslot-rank">
-                                                        {CHOICE_LABELS[rank]}
-                                                    </span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                        <TimeSlotChoices
+                            selected={selectedSlots}
+                            onChange={setSelectedSlots}
+                        />
                     </CollapsibleSection>
 
                     {error && <p className="login-error">{error}</p>}

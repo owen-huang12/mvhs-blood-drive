@@ -9,9 +9,11 @@ import useSignUpStream from "./useSignUpStream.js";
 import { clearToken } from "./auth.js";
 import { capacityFor, firstOpenSlot, isSlotFull } from "./timeSlots.js";
 import {
+    changeSlotCapacity,
     confirmSignUp,
     getCurrentCoordinator,
     listSignUps,
+    listSlotCapacity,
     moveSignUp,
     unconfirmSignUp,
 } from "./api.js";
@@ -30,6 +32,9 @@ const initialsOf = (name) =>
 export default function CoordinatorDashboard() {
     const [name, setName] = useState("");
     const [signUps, setSignUps] = useState([]);
+    // Coordinator-set positions per slot. Empty until loaded, which reads as
+    // "every slot is at its base capacity" — the correct starting state.
+    const [capacity, setCapacity] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [busyId, setBusyId] = useState(null);
@@ -50,14 +55,20 @@ export default function CoordinatorDashboard() {
         let cancelled = false;
 
         (async () => {
-            const [coordinator, rows] = await Promise.allSettled([
+            const [coordinator, rows, capacities] = await Promise.allSettled([
                 getCurrentCoordinator(),
                 listSignUps(),
+                listSlotCapacity(),
             ]);
             if (cancelled) return;
 
             if (coordinator.status === "fulfilled") {
                 setName(coordinator.value.full_name);
+            }
+            // A failure here isn't worth blocking on: the schedule still
+            // renders at base capacity, which is right for an unedited drive.
+            if (capacities.status === "fulfilled") {
+                setCapacity(capacities.value);
             }
             if (rows.status === "fulfilled") {
                 setSignUps(rows.value);
@@ -93,10 +104,18 @@ export default function CoordinatorDashboard() {
         );
     }, []);
 
+    /** Apply a capacity change made on another dashboard. */
+    const applyRemoteCapacity = useCallback(({ time_slot, capacity }) => {
+        setCapacity((prev) => ({ ...prev, [time_slot]: capacity }));
+    }, []);
+
     /** Rebuild from the server after events were missed. */
     const resync = useCallback(async () => {
         try {
-            const rows = await listSignUps();
+            const [rows, capacities] = await Promise.all([
+                listSignUps(),
+                listSlotCapacity(),
+            ]);
             setSignUps((prev) =>
                 rows.map((row) =>
                     locked.current.has(row.id)
@@ -104,13 +123,18 @@ export default function CoordinatorDashboard() {
                         : row,
                 ),
             );
+            setCapacity(capacities);
             setError("");
         } catch {
             // Keep showing the last known rows; the next reconnect retries.
         }
     }, []);
 
-    useSignUpStream({ onRow: applyRemote, onResync: resync });
+    useSignUpStream({
+        onRow: applyRemote,
+        onCapacity: applyRemoteCapacity,
+        onResync: resync,
+    });
 
     /**
      * Only performs the request. The row animates itself out and then calls
@@ -193,16 +217,28 @@ export default function CoordinatorDashboard() {
         }
     };
 
+    /**
+     * Add or remove one position on a slot.
+     *
+     * Rethrows on failure so the panel can show the server's reason — which
+     * floor was hit — against the row the coordinator clicked, rather than as
+     * a detached banner at the top of the page.
+     */
+    const handleCapacityChange = async (slotKey, delta) => {
+        const updated = await changeSlotCapacity(slotKey, delta);
+        setCapacity((prev) => ({ ...prev, [slotKey]: updated.capacity }));
+    };
+
     const handleSignOut = () => {
         clearToken();
         navigate("/coordinators");
     };
 
     const handleSlotFull = (slotKey) => {
-        const capacity = capacityFor(slotKey);
+        const seats = capacityFor(slotKey, capacity);
         setSlotFullMessage(
-            `${slotKey} is full (${capacity} ${
-                capacity === 1 ? "appointment" : "appointments"
+            `${slotKey} is full (${seats} ${
+                seats === 1 ? "appointment" : "appointments"
             } maximum).`,
         );
     };
@@ -240,14 +276,18 @@ export default function CoordinatorDashboard() {
                                 onConfirm={handleConfirm}
                                 onOverride={handleOverride}
                                 onCommit={applyUpdate}
-                                isSlotFull={(key) => isSlotFull(confirmed, key)}
-                                earliestOpen={firstOpenSlot(confirmed)}
+                                isSlotFull={(key) =>
+                                    isSlotFull(confirmed, key, capacity)
+                                }
+                                earliestOpen={firstOpenSlot(confirmed, capacity)}
                             />
                             <AppointmentTable
                                 signUps={confirmed}
+                                capacity={capacity}
                                 onUnconfirm={handleUnconfirm}
                                 onMove={handleMove}
                                 onSlotFull={handleSlotFull}
+                                onCapacityChange={handleCapacityChange}
                                 busyId={busyId}
                             />
                         </>

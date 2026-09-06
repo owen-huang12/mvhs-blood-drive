@@ -5,6 +5,8 @@ import Header from "./Header.jsx";
 import HomePage from "./HomePage.jsx";
 import StudentPersonalInfo from "./StudentPersonalInfo.jsx";
 import CompletedStudentForm from "./CompletedStudentForm.jsx";
+import TeacherSignUp from "./TeacherSignUp.jsx";
+import CommunityMemberSignUp from "./CommunityMemberSignUp.jsx";
 import CoordinatorsPage from "./CoordinatorsPage.jsx";
 import CoordinatorRegisterPage from "./CoordinatorRegisterPage.jsx";
 import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
@@ -40,7 +42,12 @@ export default function App() {
                 />
                 <Route element={<PublicLayout />}>
                     <Route path="/" element={<HomePage />} />
-                    <Route path="/signup" element={<StudentPersonalInfo />} />
+                    <Route path="/signup/student" element={<StudentPersonalInfo />} />
+                    <Route path="/signup/teacher" element={<TeacherSignUp />} />
+                    <Route
+                        path="/signup/community-member"
+                        element={<CommunityMemberSignUp />}
+                    />
                     <Route path="/completed" element={<CompletedStudentForm />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>

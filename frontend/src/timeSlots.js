@@ -56,11 +56,15 @@ export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
 export const REQUIRED_CHOICES = 3;
 
 /**
- * Positions available per slot, taken from the row counts in the appointment
- * spreadsheet. Capacity is not uniform — 8:30 AM seats three, 9:15 AM one.
- * Mirrored by SLOT_CAPACITY in backend/main.py, which enforces it.
+ * Positions available per slot as originally set, taken from the row counts in
+ * the appointment spreadsheet. Capacity is not uniform — 8:30 AM seats three,
+ * 9:15 AM one. Mirrored by BASE_SLOT_CAPACITY in backend/main.py.
+ *
+ * Coordinators can add positions on top of these but never remove below them,
+ * so this doubles as the floor the "−" control stops at. Live capacity comes
+ * from the server (`GET /slot-capacity`); this is the fallback until it loads.
  */
-export const SLOT_CAPACITY = {
+export const BASE_CAPACITY = {
     "Period 2 - 8:30 AM": 3,
     "Period 2 - 8:45 AM": 2,
     "Period 2 - 9:00 AM": 2,
@@ -89,7 +93,16 @@ export const SLOT_CAPACITY = {
 
 const DEFAULT_CAPACITY = 1;
 
-export const capacityFor = (slotKey) => SLOT_CAPACITY[slotKey] ?? DEFAULT_CAPACITY;
+/** Positions a slot started with — the floor a coordinator may not go below. */
+export const baseCapacityFor = (slotKey) =>
+    BASE_CAPACITY[slotKey] ?? DEFAULT_CAPACITY;
+
+/**
+ * Live capacity for a slot. `capacity` is the server's map of coordinator-set
+ * values; a slot missing from it has never been changed, so it sits at base.
+ */
+export const capacityFor = (slotKey, capacity) =>
+    capacity?.[slotKey] ?? baseCapacityFor(slotKey);
 
 const SEPARATOR = " - ";
 const FALLBACK_COLOR = { bg: "#ECECEC", text: "#5F5F5F" };
@@ -125,7 +138,7 @@ export const slotOrder = (value) => SLOT_ORDER.get(value) ?? Number.MAX_SAFE_INT
  * Confirmed sign-ups whose slot isn't on the spreadsheet are collected into a
  * trailing "Unscheduled" group rather than silently dropped.
  */
-export function buildSchedule(signUps) {
+export function buildSchedule(signUps, capacity) {
     const bySlot = new Map();
     for (const signUp of signUps) {
         const list = bySlot.get(signUp.time_slot) ?? [];
@@ -153,7 +166,7 @@ export function buildSchedule(signUps) {
             key,
             signUp,
         }));
-        for (let i = booked.length; i < capacityFor(key); i += 1) {
+        for (let i = booked.length; i < capacityFor(key, capacity); i += 1) {
             rows.push({ kind: "open", time: slot.time, key, seat: i });
         }
 
@@ -184,22 +197,31 @@ export function countInSlot(signUps, slotKey) {
     return signUps.filter((signUp) => signUp.time_slot === slotKey).length;
 }
 
-export const isSlotFull = (signUps, slotKey) =>
-    countInSlot(signUps, slotKey) >= capacityFor(slotKey);
+export const isSlotFull = (signUps, slotKey, capacity) =>
+    countInSlot(signUps, slotKey) >= capacityFor(slotKey, capacity);
 
 /**
  * Earliest slot on the schedule that still has room — the fallback when
  * every one of a person's three choices is already full.
  */
-export function firstOpenSlot(signUps) {
-    const slot = TIME_SLOTS.find((s) => !isSlotFull(signUps, formatSlot(s)));
+export function firstOpenSlot(signUps, capacity) {
+    const slot = TIME_SLOTS.find(
+        (s) => !isSlotFull(signUps, formatSlot(s), capacity)
+    );
     return slot ? formatSlot(slot) : "";
 }
 
 /** Total unfilled positions across the whole schedule. */
-export function countOpenSlots(signUps) {
+export function countOpenSlots(signUps, capacity) {
     return TIME_SLOTS.reduce((total, slot) => {
         const key = formatSlot(slot);
-        return total + Math.max(0, capacityFor(key) - countInSlot(signUps, key));
+        return (
+            total +
+            Math.max(0, capacityFor(key, capacity) - countInSlot(signUps, key))
+        );
     }, 0);
 }
+
+/** The distinct slots belonging to one period label, in schedule order. */
+export const slotsInPeriod = (period) =>
+    TIME_SLOTS.filter((slot) => slot.period === period).map(formatSlot);

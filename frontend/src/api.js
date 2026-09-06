@@ -41,6 +41,10 @@ async function request(path, { method = "GET", body, form, auth = false } = {}) 
 export const signUpStudent = (signUp) =>
     request("/student-sign-up", { method: "POST", body: signUp });
 
+/** Teachers and community members: no student ID, age or grade. */
+export const signUpAdult = (signUp) =>
+    request("/adult-sign-up", { method: "POST", body: signUp });
+
 /** Step one of coordinator registration: is this admin code real? */
 export const verifyInviteCode = (inviteCode) =>
     request("/coordinator/verify-invite", {
@@ -79,6 +83,20 @@ export const moveSignUp = (id, timeSlot) =>
         method: "PATCH",
         auth: true,
         body: { time_slot: timeSlot },
+    });
+
+/** Effective capacity of every slot, keyed by slot string. */
+export const listSlotCapacity = () => request("/slot-capacity", { auth: true });
+
+/**
+ * Add (+1) or remove (-1) one position on a slot. The server refuses to go
+ * below the slot's original capacity or below the number already booked.
+ */
+export const changeSlotCapacity = (timeSlot, delta) =>
+    request(`/slot-capacity/${encodeURIComponent(timeSlot)}`, {
+        method: "PATCH",
+        auth: true,
+        body: { delta },
     });
 
 /**

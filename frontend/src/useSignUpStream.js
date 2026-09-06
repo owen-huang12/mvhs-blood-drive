@@ -7,19 +7,22 @@ const MAX_RETRY_MS = 30000;
 /**
  * Keep the dashboard in step with every other open dashboard.
  *
- * `onRow` receives a full sign-up row to upsert. `onResync` is called when the
- * local view may have missed events and has to be rebuilt from a fetch —
- * events sent while disconnected are not replayed, so reconnecting without a
- * resync would leave the table silently stale.
+ * `onRow` receives a full sign-up row to upsert, `onCapacity` a slot whose
+ * positions another coordinator changed. `onResync` is called when the local
+ * view may have missed events and has to be rebuilt from a fetch — events sent
+ * while disconnected are not replayed, so reconnecting without a resync would
+ * leave the table silently stale.
  */
-export default function useSignUpStream({ onRow, onResync }) {
+export default function useSignUpStream({ onRow, onCapacity, onResync }) {
     // Held in refs so a changing callback identity never tears down the
     // connection; the effect below deliberately runs once.
     const onRowRef = useRef(onRow);
+    const onCapacityRef = useRef(onCapacity);
     const onResyncRef = useRef(onResync);
 
     useEffect(() => {
         onRowRef.current = onRow;
+        onCapacityRef.current = onCapacity;
         onResyncRef.current = onResync;
     });
 
@@ -43,6 +46,8 @@ export default function useSignUpStream({ onRow, onResync }) {
                             if (isReconnect) onResyncRef.current();
                         } else if (type === "desync") {
                             onResyncRef.current();
+                        } else if (type === "capacity.updated") {
+                            onCapacityRef.current(data);
                         } else {
                             onRowRef.current(data);
                         }

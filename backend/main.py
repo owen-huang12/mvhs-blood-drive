@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 import bcrypt
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import psycopg2
 
 load_dotenv()
@@ -95,6 +95,8 @@ broker = EventBroker()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     broker.bind(asyncio.get_running_loop())
+    _ensure_slot_capacity_table()
+    _ensure_participant_type_column()
     yield
 
 
@@ -204,10 +206,23 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+# Who a sign-up is. Students give a student ID, age and grade; teachers and
+# community members give only a name, an email and their three choices.
+PARTICIPANT_TYPES = ("student", "teacher", "community")
+
+# Non-students have no student ID, age or grade to give. Those columns are NOT
+# NULL, so their absence is stored as a blank/zero rather than by loosening the
+# schema — `participant_type` is what says whether they are meaningful.
+NO_STUDENT_ID = ""
+NO_GRADE = ""
+NO_AGE = 0
+
+
 class SignUpRow(BaseModel):
     id: int
     full_name: str
     is_student: bool
+    participant_type: str
     student_id: str
     age: int
     email_address: str
@@ -223,6 +238,27 @@ class ConfirmSignUp(BaseModel):
     time_slot: str
 
 
+class CapacityChange(BaseModel):
+    """One position added or removed. Constrained so the endpoint can only ever
+    step a slot by one — a client cannot post an arbitrary new capacity."""
+    delta: int
+
+    @field_validator("delta")
+    @classmethod
+    def _one_step(cls, value: int) -> int:
+        if value not in (-1, 1):
+            raise ValueError("delta must be -1 or 1")
+        return value
+
+
+class SlotCapacityRow(BaseModel):
+    time_slot: str
+    capacity: int
+    # What the slot started at, so the dashboard can grey out "−" at the floor
+    # instead of finding out by way of a 409.
+    base: int
+
+
 class StudentSignUp(BaseModel):
     full_name: str
     student_id: str
@@ -234,6 +270,27 @@ class StudentSignUp(BaseModel):
     third_choice: str
     is_student: bool = True
     confirmed: bool = False
+
+
+class AdultSignUp(BaseModel):
+    """A teacher or community member: no student ID, age or grade.
+
+    Age is not asked for because the 16-year-old minimum is a school-student
+    concern; every adult signing up here clears it by definition.
+    """
+    full_name: str
+    email_address: str
+    first_choice: str
+    second_choice: str
+    third_choice: str
+    participant_type: str
+
+    @field_validator("participant_type")
+    @classmethod
+    def _adult_type(cls, value: str) -> str:
+        if value not in ("teacher", "community"):
+            raise ValueError("participant_type must be 'teacher' or 'community'")
+        return value
 
 
 # routes
@@ -343,22 +400,30 @@ def update_coordinator(coordinator: CoordinatorCreate):
 MIN_SIGN_UP_AGE = 16
 
 
-@app.post('/student-sign-up')
-def create_student_sign_up(sign_up: StudentSignUp):
-    if sign_up.age < MIN_SIGN_UP_AGE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Must be at least {MIN_SIGN_UP_AGE} years old to sign up.",
-        )
+def _insert_sign_up(
+    *,
+    full_name: str,
+    email_address: str,
+    participant_type: str,
+    student_id: str,
+    age: int,
+    grade: str,
+    first_choice: str,
+    second_choice: str,
+    third_choice: str,
+) -> SignUpRow:
+    """Store one sign-up of any participant type, rejecting duplicates.
 
-    email_address = sign_up.email_address.strip()
-    student_id = sign_up.student_id.strip()
+    Shared by the student and adult routes so the duplicate rules and the
+    column list live in one place.
+    """
+    email_address = email_address.strip()
+    student_id = student_id.strip()
 
     with db_cursor(commit=True) as cur:
         # One sign-up per person: a repeat is nearly always a double submit or
         # someone refilling the form, not a second donor. Email is matched
-        # case-insensitively since Foo@ and foo@ reach the same inbox, and
-        # student ID is checked too so a second email can't get round it.
+        # case-insensitively since Foo@ and foo@ reach the same inbox.
         cur.execute(
             "SELECT 1 FROM sign_ups WHERE LOWER(email_address) = LOWER(%s)",
             (email_address,),
@@ -369,12 +434,16 @@ def create_student_sign_up(sign_up: StudentSignUp):
                 detail="A sign-up already exists for that email address.",
             )
 
-        cur.execute("SELECT 1 FROM sign_ups WHERE student_id = %s", (student_id,))
-        if cur.fetchone() is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="A sign-up already exists for that student ID.",
-            )
+        # Student ID is checked too, so a second email can't get round the
+        # rule above. Skipped when blank: teachers and community members have
+        # no ID, and every one of them would otherwise collide on "".
+        if student_id:
+            cur.execute("SELECT 1 FROM sign_ups WHERE student_id = %s", (student_id,))
+            if cur.fetchone() is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A sign-up already exists for that student ID.",
+                )
 
         # NOTE: races with concurrent signups. Fix is an identity column on id.
         cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM sign_ups")
@@ -382,17 +451,22 @@ def create_student_sign_up(sign_up: StudentSignUp):
         cur.execute(
             """
             INSERT INTO sign_ups (
-                id, full_name, is_student, student_id, age, timestamp,
-                email_address, grade, confirmed, time_slot,
+                id, full_name, is_student, participant_type, student_id, age,
+                timestamp, email_address, grade, confirmed, time_slot,
                 first_choice, second_choice, third_choice
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                new_id, str.title(sign_up.full_name), sign_up.is_student, student_id,
-                sign_up.age, datetime.now(timezone.utc), email_address,
-                sign_up.grade, sign_up.confirmed, sign_up.first_choice,
-                sign_up.first_choice, sign_up.second_choice, sign_up.third_choice
+                new_id, str.title(full_name), participant_type == "student",
+                participant_type, student_id, age, datetime.now(timezone.utc),
+                email_address, grade, False,
+                # time_slot is seeded with the first choice rather than left
+                # blank; the row is unconfirmed, so the dashboard ignores it
+                # until a coordinator assigns one. Kept as-is to match the
+                # existing rows.
+                first_choice,
+                first_choice, second_choice, third_choice,
             )
         )
         cur.execute(
@@ -407,9 +481,51 @@ def create_student_sign_up(sign_up: StudentSignUp):
     return created
 
 
+@app.post('/student-sign-up')
+def create_student_sign_up(sign_up: StudentSignUp):
+    if sign_up.age < MIN_SIGN_UP_AGE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Must be at least {MIN_SIGN_UP_AGE} years old to sign up.",
+        )
+
+    return _insert_sign_up(
+        full_name=sign_up.full_name,
+        email_address=sign_up.email_address,
+        participant_type="student",
+        student_id=sign_up.student_id,
+        age=sign_up.age,
+        grade=sign_up.grade,
+        first_choice=sign_up.first_choice,
+        second_choice=sign_up.second_choice,
+        third_choice=sign_up.third_choice,
+    )
+
+
+@app.post('/adult-sign-up')
+def create_adult_sign_up(sign_up: AdultSignUp):
+    """Register a teacher or community member.
+
+    They give only a name, an email and three choices; the student-only
+    columns are stored blank (see NO_STUDENT_ID and friends).
+    """
+    return _insert_sign_up(
+        full_name=sign_up.full_name,
+        email_address=sign_up.email_address,
+        participant_type=sign_up.participant_type,
+        student_id=NO_STUDENT_ID,
+        age=NO_AGE,
+        grade=NO_GRADE,
+        first_choice=sign_up.first_choice,
+        second_choice=sign_up.second_choice,
+        third_choice=sign_up.third_choice,
+    )
+
+
 SIGN_UP_COLUMNS = """
     id, full_name, is_student, student_id, age, email_address,
-    grade, confirmed, time_slot, first_choice, second_choice, third_choice
+    grade, confirmed, time_slot, first_choice, second_choice, third_choice,
+    participant_type
 """
 
 
@@ -419,6 +535,9 @@ def _row_to_sign_up(row) -> SignUpRow:
         age=row[4], email_address=row[5], grade=row[6], confirmed=row[7],
         time_slot=row[8], first_choice=row[9], second_choice=row[10],
         third_choice=row[11],
+        # Coalesced for safety: a row written between the ALTER and the
+        # backfill would otherwise arrive as None and fail validation.
+        participant_type=row[12] or ("student" if row[2] else "teacher"),
     )
 
 
@@ -470,9 +589,14 @@ def list_sign_ups(_: str = Depends(get_current_coordinator)):
     return [_row_to_sign_up(row) for row in rows]
 
 
-# Positions available per slot, from the appointment spreadsheet's row counts.
-# Capacity is not uniform. Mirrored by SLOT_CAPACITY in frontend/src/timeSlots.js.
-SLOT_CAPACITY = {
+# Positions available per slot as originally set from the appointment
+# spreadsheet's row counts. Capacity is not uniform. Mirrored by BASE_CAPACITY
+# in frontend/src/timeSlots.js.
+#
+# Coordinators may add positions on top of these, but never remove below them:
+# this is the floor the drive was planned around, so it is the lower bound
+# enforced by /slot-capacity.
+BASE_SLOT_CAPACITY = {
     "Period 2 - 8:30 AM": 3,
     "Period 2 - 8:45 AM": 2,
     "Period 2 - 9:00 AM": 2,
@@ -501,6 +625,70 @@ SLOT_CAPACITY = {
 
 DEFAULT_CAPACITY = 1
 
+# A single slot can't grow without bound — an upper stop keeps a stuck "+" from
+# turning one time into an unschedulable pile.
+MAX_SLOT_CAPACITY = 20
+
+# Canonical schedule, and the allow-list for coordinator reassignment. Derived
+# from the capacity table above so the two can never drift apart.
+VALID_TIME_SLOTS = frozenset(BASE_SLOT_CAPACITY)
+
+
+def _ensure_slot_capacity_table() -> None:
+    """Create the capacity override table if it isn't there yet.
+
+    Only slots a coordinator has actually changed get a row; everything else
+    falls back to BASE_SLOT_CAPACITY, so an empty table is the correct
+    starting state and no seeding step is needed.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS slot_capacity (
+                   time_slot TEXT PRIMARY KEY,
+                   capacity  INTEGER NOT NULL
+               )"""
+        )
+
+
+def _ensure_participant_type_column() -> None:
+    """Add `participant_type` to sign_ups, backfilling from `is_student`.
+
+    `is_student` is a boolean and so cannot distinguish teachers from community
+    members. It is kept in step on write rather than dropped, since existing
+    rows and the old client both still read it.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """ALTER TABLE sign_ups
+               ADD COLUMN IF NOT EXISTS participant_type VARCHAR(20)"""
+        )
+        # Only touches rows the column was just added for. Pre-existing rows
+        # are all students, and anything already set is left alone.
+        cur.execute(
+            """UPDATE sign_ups
+               SET participant_type = CASE WHEN is_student THEN 'student'
+                                           ELSE 'teacher' END
+               WHERE participant_type IS NULL"""
+        )
+
+
+def _base_capacity(time_slot: str) -> int:
+    return BASE_SLOT_CAPACITY.get(time_slot, DEFAULT_CAPACITY)
+
+
+def _capacity_overrides(cur) -> dict[str, int]:
+    """Coordinator-set capacities, keyed by slot. Absent means "use the base"."""
+    cur.execute("SELECT time_slot, capacity FROM slot_capacity")
+    return {row[0]: row[1] for row in cur.fetchall()}
+
+
+def _capacity_for(cur, time_slot: str) -> int:
+    cur.execute(
+        "SELECT capacity FROM slot_capacity WHERE time_slot = %s", (time_slot,)
+    )
+    row = cur.fetchone()
+    return row[0] if row is not None else _base_capacity(time_slot)
+
 
 def _assert_slot_has_room(cur, time_slot: str, moving_id: int) -> None:
     """Reject the write if the destination slot has no room left.
@@ -508,7 +696,7 @@ def _assert_slot_has_room(cur, time_slot: str, moving_id: int) -> None:
     `moving_id` is excluded so re-confirming someone already in the slot
     does not count them against themselves.
     """
-    capacity = SLOT_CAPACITY.get(time_slot, DEFAULT_CAPACITY)
+    capacity = _capacity_for(cur, time_slot)
     cur.execute(
         """SELECT COUNT(*) FROM sign_ups
            WHERE confirmed = TRUE AND time_slot = %s AND id <> %s""",
@@ -520,6 +708,90 @@ def _assert_slot_has_room(cur, time_slot: str, moving_id: int) -> None:
             status_code=409,
             detail=f"{time_slot} is full ({capacity} {plural} maximum).",
         )
+
+
+@app.get("/slot-capacity", response_model=dict[str, int])
+def list_slot_capacity(_: str = Depends(get_current_coordinator)):
+    """Effective capacity for every slot: the base, plus any override."""
+    with db_cursor() as cur:
+        overrides = _capacity_overrides(cur)
+    return {
+        slot: overrides.get(slot, _base_capacity(slot))
+        for slot in VALID_TIME_SLOTS
+    }
+
+
+@app.patch("/slot-capacity/{time_slot:path}", response_model=SlotCapacityRow)
+def set_slot_capacity(
+    time_slot: str,
+    change: CapacityChange,
+    _: str = Depends(get_current_coordinator),
+):
+    """Add or remove a position on one slot.
+
+    Two floors apply. Capacity never drops below what the drive was planned
+    around (BASE_SLOT_CAPACITY), and never below the number of people already
+    confirmed into the slot — removing a position out from under someone who
+    holds it would silently orphan their appointment.
+    """
+    if time_slot not in VALID_TIME_SLOTS:
+        raise HTTPException(status_code=404, detail="Unknown time slot")
+
+    base = _base_capacity(time_slot)
+
+    with db_cursor(commit=True) as cur:
+        # Locked for the transaction so two coordinators clicking "+" at once
+        # can't both read the same current value and each write base + 1.
+        cur.execute(
+            "SELECT capacity FROM slot_capacity WHERE time_slot = %s FOR UPDATE",
+            (time_slot,),
+        )
+        row = cur.fetchone()
+        current = row[0] if row is not None else base
+        target = current + change.delta
+
+        if target < base:
+            plural = "position" if base == 1 else "positions"
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{time_slot} started with {base} {plural}. "
+                    "You can add positions, but not remove the original ones."
+                ),
+            )
+
+        if target > MAX_SLOT_CAPACITY:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{time_slot} can hold at most {MAX_SLOT_CAPACITY} appointments.",
+            )
+
+        cur.execute(
+            """SELECT COUNT(*) FROM sign_ups
+               WHERE confirmed = TRUE AND time_slot = %s""",
+            (time_slot,),
+        )
+        booked = cur.fetchone()[0]
+        if target < booked:
+            plural = "appointment is" if booked == 1 else "appointments are"
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{booked} {plural} already booked into {time_slot}. "
+                    "Move them elsewhere before removing the position."
+                ),
+            )
+
+        cur.execute(
+            """INSERT INTO slot_capacity (time_slot, capacity) VALUES (%s, %s)
+               ON CONFLICT (time_slot) DO UPDATE SET capacity = EXCLUDED.capacity""",
+            (time_slot, target),
+        )
+
+    updated = SlotCapacityRow(time_slot=time_slot, capacity=target, base=base)
+    # Keeps other open dashboards' schedules in step, the same way row edits do.
+    broker.publish("capacity.updated", updated.model_dump())
+    return updated
 
 
 @app.patch("/sign-ups/{sign_up_id}/confirm", response_model=SignUpRow)
@@ -579,24 +851,6 @@ def unconfirm_sign_up(sign_up_id: int, _: str = Depends(get_current_coordinator)
 
     broker.publish("sign_up.updated", updated.model_dump())
     return updated
-
-
-# Canonical schedule. Mirrors frontend/src/timeSlots.js — keep the two in sync;
-# it is the allow-list for coordinator drag-and-drop reassignment.
-VALID_TIME_SLOTS = frozenset({
-    "Period 2 - 8:30 AM", "Period 2 - 8:45 AM", "Period 2 - 9:00 AM",
-    "Period 2 - 9:15 AM", "Period 2 - 9:30 AM", "Period 2 - 9:45 AM",
-    "Period 2/Tutorial - 10:00 AM",
-    "Tutorial - 10:15 AM", "Tutorial - 10:30 AM", "Tutorial - 10:45 AM",
-    "Brunch/Period 4 - 11:00 AM",
-    "Period 4 - 11:15 AM", "Period 4 - 11:30 AM", "Period 4 - 11:45 AM",
-    "Period 4 - 12:00 PM", "Period 4 - 12:15 PM",
-    "Period 4/Lunch - 12:30 PM",
-    "Lunch - 12:45 PM", "Lunch - 1:00 PM",
-    "Lunch/Period 6 - 1:15 PM",
-    "Period 6 - 1:30 PM", "Period 6 - 1:45 PM", "Period 6 - 2:00 PM",
-    "Period 6 - 2:15 PM",
-})
 
 
 @app.get("/time-slots", response_model=list[str])

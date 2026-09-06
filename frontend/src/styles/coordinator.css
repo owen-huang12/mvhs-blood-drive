@@ -118,6 +118,7 @@
 .pending-row:hover { background-color: #faf9f8; }
 
 .pending-row .pending-name,
+.pending-row .pending-status,
 .pending-row .pending-meta {
   display: flex;
   align-items: center;
@@ -169,5 +170,17 @@
 }
 
 .pending-meta { color: #6b6b6b; font-size: 0.9rem; }
+
+/* Participant type. Colour comes from participants.js so the pending list and
+   the appointment table label the same person identically. */
+.pending-status {
+  justify-content: center;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Teachers and community members have no student ID or age, so the status
+   runs across those columns rather than leaving two blank cells. */
+.pending-status[data-span="3"] { grid-column: span 3; }
 
 /* Slot picker styles live in slot-picker.css. */

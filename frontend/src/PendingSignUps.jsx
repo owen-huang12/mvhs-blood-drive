@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { animate } from "animejs";
 import SlotPicker from "./SlotPicker.jsx";
+import { isStudent, participantOf } from "./participants.js";
 
 /** Promise-wrapped animate() so steps can be awaited in sequence. */
 const run = (targets, params) =>
@@ -69,14 +70,28 @@ function PendingRow({
         onCommit(updated);
     }
 
+    const person = participantOf(signUp);
+    // Only students have an ID and an age to show. For everyone else the
+    // status runs across both columns instead of sitting beside blanks.
+    const hasStudentFields = isStudent(signUp);
+
     return (
         <div className="pending-row" ref={rowRef}>
             <span className="pending-name">{signUp.full_name}</span>
-            <span className="pending-meta">{signUp.student_id}</span>
-            <span className="pending-meta">
-                {signUp.is_student ? "Student" : "Teacher"}
+            <span
+                className="pending-status"
+                style={{ backgroundColor: person.bg, color: person.text }}
+                // Spans the Student ID and Age columns when they are empty.
+                data-span={hasStudentFields ? undefined : "3"}
+            >
+                {person.label}
             </span>
-            <span className="pending-meta">{signUp.age}</span>
+            {hasStudentFields && (
+                <>
+                    <span className="pending-meta">{signUp.student_id}</span>
+                    <span className="pending-meta">{signUp.age}</span>
+                </>
+            )}
 
             <SlotPicker
                 choices={choices}
@@ -123,8 +138,8 @@ export default function PendingSignUps({
                 <div className="pending-list">
                     <div className="pending-header" aria-hidden="true">
                         <span>Full Name</span>
-                        <span>Student ID</span>
                         <span>Status</span>
+                        <span>Student ID</span>
                         <span>Age</span>
                         <span>Time Slot</span>
                         <span />

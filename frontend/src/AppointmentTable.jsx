@@ -1,4 +1,6 @@
 import { useState } from "react";
+import CapacityPicker from "./CapacityPicker.jsx";
+import { isStudent, participantOf } from "./participants.js";
 import {
     buildSchedule,
     colorsForPeriod,
@@ -10,22 +12,35 @@ const DRAG_TYPE = "application/x-signup-id";
 
 export default function AppointmentTable({
     signUps,
+    capacity,
     onUnconfirm,
     onMove,
     onSlotFull,
+    onCapacityChange,
     busyId,
 }) {
     const [draggingId, setDraggingId] = useState(null);
     const [dropSlot, setDropSlot] = useState(null);
+    // The period whose capacity panel is open, plus where to anchor it.
+    const [capacityMenu, setCapacityMenu] = useState(null);
 
-    const groups = buildSchedule(signUps);
-    const openCount = countOpenSlots(signUps);
+    const groups = buildSchedule(signUps, capacity);
+    const openCount = countOpenSlots(signUps, capacity);
 
     /** A slot blocks the drop when it is full, unless the dragged row is already in it. */
     const blocks = (slotKey) => {
         const dragged = signUps.find((signUp) => signUp.id === draggingId);
         if (dragged && dragged.time_slot === slotKey) return false;
-        return isSlotFull(signUps, slotKey);
+        return isSlotFull(signUps, slotKey, capacity);
+    };
+
+    /** Right-clicking a period opens its capacity panel instead of the browser menu. */
+    const handlePeriodContextMenu = (event, period) => {
+        // "Unscheduled" is a catch-all for off-schedule rows, not a real
+        // period, so it has no positions to add or remove.
+        if (period === "Unscheduled") return;
+        event.preventDefault();
+        setCapacityMenu({ period, x: event.clientX, y: event.clientY });
     };
 
     const handleDragStart = (event, id) => {
@@ -126,8 +141,18 @@ export default function AppointmentTable({
                                     }
                                 >
                                     <td
-                                        className="period-cell"
+                                        className={`period-cell${
+                                            droppable ? " has-capacity-menu" : ""
+                                        }`}
                                         style={{ backgroundColor: periodBg }}
+                                        onContextMenu={(e) =>
+                                            handlePeriodContextMenu(e, group.period)
+                                        }
+                                        title={
+                                            droppable
+                                                ? "Right-click to add or remove positions"
+                                                : undefined
+                                        }
                                     >
                                         {group.period}
                                     </td>
@@ -144,24 +169,32 @@ export default function AppointmentTable({
                                                 </span>
                                                 {row.signUp.full_name}
                                             </td>
-                                            <td
-                                                className="status-cell"
-                                                style={{
-                                                    backgroundColor: row.signUp.is_student
-                                                        ? "#E3F0FA"
-                                                        : "#F3E8FA",
-                                                    color: row.signUp.is_student
-                                                        ? "#3E7793"
-                                                        : "#7B5AA6",
-                                                }}
-                                            >
-                                                {row.signUp.is_student ? "Student" : "Teacher"}
-                                            </td>
-                                            <td>
-                                                {row.signUp.is_student
-                                                    ? row.signUp.student_id
-                                                    : ""}
-                                            </td>
+                                            {(() => {
+                                                const person = participantOf(row.signUp);
+                                                // Only students have an ID to
+                                                // show, so for everyone else
+                                                // the status runs across both
+                                                // columns rather than sitting
+                                                // beside an empty cell.
+                                                const hasId = isStudent(row.signUp);
+                                                return (
+                                                    <>
+                                                        <td
+                                                            className="status-cell"
+                                                            colSpan={hasId ? 1 : 2}
+                                                            style={{
+                                                                backgroundColor: person.bg,
+                                                                color: person.text,
+                                                            }}
+                                                        >
+                                                            {person.label}
+                                                        </td>
+                                                        {hasId && (
+                                                            <td>{row.signUp.student_id}</td>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
                                             <td className="appointment-email">
                                                 {row.signUp.email_address}
                                             </td>
@@ -184,6 +217,17 @@ export default function AppointmentTable({
                     })}
                 </tbody>
             </table>
+
+            {capacityMenu && (
+                <CapacityPicker
+                    period={capacityMenu.period}
+                    anchor={{ x: capacityMenu.x, y: capacityMenu.y }}
+                    signUps={signUps}
+                    capacity={capacity}
+                    onChange={onCapacityChange}
+                    onClose={() => setCapacityMenu(null)}
+                />
+            )}
         </section>
     );
 }
