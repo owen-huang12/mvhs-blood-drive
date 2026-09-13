@@ -7,14 +7,8 @@ import CollapsibleSection from "./CollapsibleSection.jsx";
  * team. Replace the strings; nothing else needs to change.
  */
 const ROLE_NOTES = {
-    teacher: `Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque
-        faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi
-        pretium tellus duis convallis. Tempus leo eu aenean sed diam urna
-        tempor.`,
-    community: `Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque
-        faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi
-        pretium tellus duis convallis. Tempus leo eu aenean sed diam urna
-        tempor.`,
+    teacher: `As a teacher, you will be given priority when assigned your MVHS Stanford Blood drive appointment time. We are so grateful for your support!`,
+    community: `As a community member you will be given priority when assigned your MVHS Stanford Blood drive appointment time. Truly, we are so grateful for your support!`,
 };
 
 /**
@@ -31,18 +25,14 @@ export default function BloodDriveOverview({ role }) {
         <CollapsibleSection title="Overview of the Stanford Blood Drive">
             <div className="overview-text">
                 <p>
-                    Lorem ipsum dolor sit amet consectetur adipiscing elit.
-                    Quisque faucibus ex sapien vitae pellentesque sem placerat.
-                    In id cursus mi pretium tellus duis convallis. Tempus leo eu
-                    aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus
-                    nec metus bibendum egestas. Iaculis massa nisl malesuada
-                    lacinia integer nunc posuere.
-                </p>
-                <p>
-                    Lorem ipsum dolor sit amet consectetur adipiscing elit.
-                    Quisque faucibus ex sapien vitae pellentesque sem placerat.
-                    In id cursus mi pretium tellus duis convallis. Tempus leo eu
-                    aenean sed diam urna tempor.
+                    When you arrive at the MVHS Stanford Blood Drive, you’ll first check in at the entrance 
+                    and complete the necessary forms, including the medical background questionnaire and 
+                    parental consent form (if needed). You’ll then be taken back for a health history 
+                    screening, where Stanford Blood Center staff will review your information and determine 
+                    whether you are eligible to donate. If you are eligible, you’ll be seated in a donor
+                    chair, and your blood will be collected. After donating, you’ll rest for about 15 
+                    minutes with refreshments and snacks to ensure you’re feeling well. 
+                    Once you are cleared to go, you’ll check out and be on your way!
                 </p>
                 {note && <p className="overview-role-note">{note}</p>}
             </div>
