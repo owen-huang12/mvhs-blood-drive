@@ -131,7 +131,7 @@ export default function SignUpCta() {
                 <span>
                     Sign up for the
                     <br />
-                    8/12 blood drive
+                    10/16 blood drive
                 </span>
             </button>
         </div>
