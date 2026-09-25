@@ -8,6 +8,7 @@
 @import './styles/tables.css';
 @import './styles/coordinator.css';
 @import './styles/appointment-table.css';
+@import './styles/day-of.css';
 @import './styles/modal.css';
 @import './styles/spinner.css';
 @import './styles/slot-picker.css';

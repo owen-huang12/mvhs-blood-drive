@@ -11,6 +11,9 @@ import CoordinatorsPage from "./CoordinatorsPage.jsx";
 import CoordinatorRegisterPage from "./CoordinatorRegisterPage.jsx";
 import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
 import RequireAuth from "./RequireAuth.jsx";
+import RequirePhaseTwo from "./RequirePhaseTwo.jsx";
+import DayOfStation from "./DayOfStation.jsx";
+import AttendanceClerk from "./AttendanceClerk.jsx";
 
 /** Public pages share the site header; coordinator pages render their own. */
 function PublicLayout() {
@@ -37,6 +40,28 @@ export default function App() {
                     element={
                         <RequireAuth>
                             <CoordinatorDashboard />
+                        </RequireAuth>
+                    }
+                />
+                {/* Day-of pages. Unlinked, and closed until two days
+                    before the drive — the API enforces the same date. */}
+                <Route
+                    path="/coordinators/day-of"
+                    element={
+                        <RequireAuth>
+                            <RequirePhaseTwo>
+                                <DayOfStation />
+                            </RequirePhaseTwo>
+                        </RequireAuth>
+                    }
+                />
+                <Route
+                    path="/coordinators/attendance"
+                    element={
+                        <RequireAuth>
+                            <RequirePhaseTwo>
+                                <AttendanceClerk />
+                            </RequirePhaseTwo>
                         </RequireAuth>
                     }
                 />

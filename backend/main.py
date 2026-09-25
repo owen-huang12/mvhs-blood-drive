@@ -28,6 +28,24 @@ COORDINATOR_INVITE_CODE = os.environ.get("COORDINATOR_INVITE_CODE")
 
 MIN_PASSWORD_LENGTH = 8
 
+# Day-of features (check-in times, deferral, attendance) stay closed until two
+# days before the drive. The date is the real boundary, not just a hidden
+# route: these endpoints 403 before it, so an early client cannot write
+# operational data into a schedule that is still being rearranged.
+#
+# PHASE_TWO_OVERRIDE=1 opens them regardless, for local development and demos.
+PHASE_TWO_START = datetime(2026, 10, 14, tzinfo=timezone.utc)
+
+
+def _assert_phase_two_open() -> None:
+    if os.environ.get("PHASE_TWO_OVERRIDE") == "1":
+        return
+    if datetime.now(timezone.utc) < PHASE_TWO_START:
+        raise HTTPException(
+            status_code=403,
+            detail="Day-of features open on October 14.",
+        )
+
 # How long a stream sits idle before emitting a comment frame. Proxies (and
 # Railway's router) drop connections that go quiet, so this keeps them open.
 SSE_KEEPALIVE_SECONDS = 20
@@ -97,6 +115,7 @@ async def lifespan(_: FastAPI):
     broker.bind(asyncio.get_running_loop())
     _ensure_slot_capacity_table()
     _ensure_participant_type_column()
+    _ensure_day_of_columns()
     yield
 
 
@@ -232,6 +251,40 @@ class SignUpRow(BaseModel):
     first_choice: str
     second_choice: str
     third_choice: str
+    # Day-of state. Null timestamps mean that step hasn't happened yet, which
+    # is the correct reading for every row until the drive itself.
+    time_in: datetime | None = None
+    time_canteen: datetime | None = None
+    time_out: datetime | None = None
+    deferred: bool = False
+    # Owned by the attendance clerk, not the day-of station: whether this
+    # student has been marked off in the school's own attendance system.
+    attendance_cleared: bool = False
+
+
+class DayOfStamp(BaseModel):
+    """One day-of field being set.
+
+    `value` is null to clear a mistakenly-stamped time, and omitted entirely
+    to mean "stamp it now" — the one-tap path at the check-in desk.
+    """
+    field: str
+    value: datetime | None = None
+
+    @field_validator("field")
+    @classmethod
+    def _known_field(cls, value: str) -> str:
+        if value not in DAY_OF_TIME_FIELDS:
+            raise ValueError(f"field must be one of {sorted(DAY_OF_TIME_FIELDS)}")
+        return value
+
+
+class DeferredChange(BaseModel):
+    deferred: bool
+
+
+class AttendanceChange(BaseModel):
+    attendance_cleared: bool
 
 
 class ConfirmSignUp(BaseModel):
@@ -525,7 +578,8 @@ def create_adult_sign_up(sign_up: AdultSignUp):
 SIGN_UP_COLUMNS = """
     id, full_name, is_student, student_id, age, email_address,
     grade, confirmed, time_slot, first_choice, second_choice, third_choice,
-    participant_type
+    participant_type, time_in, time_canteen, time_out, deferred,
+    attendance_cleared
 """
 
 
@@ -538,6 +592,10 @@ def _row_to_sign_up(row) -> SignUpRow:
         # Coalesced for safety: a row written between the ALTER and the
         # backfill would otherwise arrive as None and fail validation.
         participant_type=row[12] or ("student" if row[2] else "teacher"),
+        time_in=row[13], time_canteen=row[14], time_out=row[15],
+        # Defaulted rather than passed through: the columns are added NOT NULL
+        # DEFAULT FALSE, but a row read mid-migration could still be None.
+        deferred=bool(row[16]), attendance_cleared=bool(row[17]),
     )
 
 
@@ -669,6 +727,42 @@ def _ensure_participant_type_column() -> None:
                SET participant_type = CASE WHEN is_student THEN 'student'
                                            ELSE 'teacher' END
                WHERE participant_type IS NULL"""
+        )
+
+
+# The timestamp columns, and the allow-list for /day-of so a client cannot
+# name an arbitrary column.
+#
+# `time_canteen` is no longer stamped: time in the canteen is derived as
+# time_out - time_in on the client. The column is kept rather than dropped —
+# it holds no data, dropping it is the one destructive migration here, and
+# leaving it costs nothing if a separate canteen stamp is ever wanted back.
+DAY_OF_TIME_FIELDS = ("time_in", "time_canteen", "time_out")
+
+
+def _ensure_day_of_columns() -> None:
+    """Add the day-of operational columns to sign_ups.
+
+    Additive and nullable, so this can land well before the drive: phase-1
+    code ignores the new columns entirely and existing rows read as "nothing
+    has happened yet", which is exactly right before the day.
+    """
+    with db_cursor(commit=True) as cur:
+        for column in DAY_OF_TIME_FIELDS:
+            # TIMESTAMPTZ, not TIMESTAMP: a time stamped on the gym tablet must
+            # not be re-read as UTC on a coordinator's laptop.
+            cur.execute(
+                f"""ALTER TABLE sign_ups
+                    ADD COLUMN IF NOT EXISTS {column} TIMESTAMPTZ"""
+            )
+        cur.execute(
+            """ALTER TABLE sign_ups
+               ADD COLUMN IF NOT EXISTS deferred BOOLEAN NOT NULL DEFAULT FALSE"""
+        )
+        cur.execute(
+            """ALTER TABLE sign_ups
+               ADD COLUMN IF NOT EXISTS attendance_cleared BOOLEAN
+               NOT NULL DEFAULT FALSE"""
         )
 
 
@@ -889,3 +983,82 @@ def move_sign_up(
 
     broker.publish("sign_up.updated", moved.model_dump())
     return moved
+
+
+def _update_day_of(sign_up_id: int, assignment: str, params: tuple) -> SignUpRow:
+    """Write one day-of field and push the result to every open dashboard.
+
+    The check-in desk and the clerk's worklist are different views of the same
+    row, so a write from either has to reach the other live.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            f"""UPDATE sign_ups SET {assignment}
+                WHERE id = %s RETURNING {SIGN_UP_COLUMNS}""",
+            params,
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Sign-up not found")
+        updated = _row_to_sign_up(row)
+
+    broker.publish("sign_up.updated", updated.model_dump(mode="json"))
+    return updated
+
+
+@app.patch("/sign-ups/{sign_up_id}/day-of", response_model=SignUpRow)
+def stamp_day_of(
+    sign_up_id: int,
+    stamp: DayOfStamp,
+    _: str = Depends(get_current_coordinator),
+):
+    """Stamp — or correct — one of the three day-of times.
+
+    Sending no value stamps the current time, which is the one-tap path at the
+    desk. Sending an explicit value fixes a time that was missed or mistyped,
+    since a volunteer will not always click at the right moment.
+    """
+    _assert_phase_two_open()
+    # Server clock, not the tablet's: a desk device with a wrong clock would
+    # otherwise write times that don't line up with the rest of the drive.
+    value = stamp.value if "value" in stamp.model_fields_set else datetime.now(timezone.utc)
+    return _update_day_of(
+        sign_up_id, f"{stamp.field} = %s", (value, sign_up_id)
+    )
+
+
+@app.patch("/sign-ups/{sign_up_id}/deferred", response_model=SignUpRow)
+def set_deferred(
+    sign_up_id: int,
+    change: DeferredChange,
+    _: str = Depends(get_current_coordinator),
+):
+    """Mark someone as turned away.
+
+    Deliberately a bare boolean. The reason for a deferral is health
+    information, and the check-in station has no business holding it.
+    """
+    _assert_phase_two_open()
+    return _update_day_of(
+        sign_up_id, "deferred = %s", (change.deferred, sign_up_id)
+    )
+
+
+@app.patch("/sign-ups/{sign_up_id}/attendance", response_model=SignUpRow)
+def set_attendance(
+    sign_up_id: int,
+    change: AttendanceChange,
+    _: str = Depends(get_current_coordinator),
+):
+    """Record that the clerk has filed this student in the school's system.
+
+    Separate from the timestamps on purpose: arriving and being marked off are
+    different facts with different owners, and they are routinely out of step
+    while the clerk works through the list.
+    """
+    _assert_phase_two_open()
+    return _update_day_of(
+        sign_up_id,
+        "attendance_cleared = %s",
+        (change.attendance_cleared, sign_up_id),
+    )

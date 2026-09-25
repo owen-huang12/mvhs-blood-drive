@@ -158,3 +158,30 @@ export const login = (email, password) =>
         // OAuth2PasswordRequestForm expects form encoding, not JSON.
         form: new URLSearchParams({ username: email, password }),
     });
+
+/**
+ * Stamp or correct one of the three day-of times.
+ *
+ * Omitting `value` lets the server stamp its own clock — the one-tap path at
+ * the check-in desk. Passing null clears a time stamped by mistake.
+ */
+export const stampDayOf = (id, field, value) =>
+    request(`/sign-ups/${id}/day-of`, {
+        method: "PATCH",
+        auth: true,
+        body: value === undefined ? { field } : { field, value },
+    });
+
+export const setDeferred = (id, deferred) =>
+    request(`/sign-ups/${id}/deferred`, {
+        method: "PATCH",
+        auth: true,
+        body: { deferred },
+    });
+
+export const setAttendance = (id, attendanceCleared) =>
+    request(`/sign-ups/${id}/attendance`, {
+        method: "PATCH",
+        auth: true,
+        body: { attendance_cleared: attendanceCleared },
+    });

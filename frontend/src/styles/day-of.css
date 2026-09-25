@@ -1,0 +1,291 @@
+/* ── Day-of station & attendance worklist ──────────────────────────── */
+
+/* Stamp and checkbox columns size to their content so the names and periods
+   keep the room they need on a narrow tablet screen. */
+.day-of-table .stamp-cell,
+.day-of-table .deferred-cell,
+.day-of-table .attendance-cell {
+  width: 1%;
+  text-align: center;
+  white-space: nowrap;
+  color: #5f5a56;
+}
+
+/* Tap targets, not text links: this is used standing up at a desk. */
+.stamp-btn {
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.8rem;
+  min-width: 68px;
+  padding: 7px 12px;
+  color: #5f5a56;
+  background: #faf9f8;
+  border: 1px solid #ded9d5;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.stamp-btn:hover:not(:disabled) {
+  background: #f1efec;
+  color: #1a1a1a;
+}
+
+.stamp-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* A stamped time and its clock button, kept together on one line. */
+.stamp-filled {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Reads as a value, not a control — the clock beside it is the affordance.
+   Double-click opens the inline editor. */
+.stamp-text {
+  padding: 7px 4px 7px 8px;
+  font-size: 0.9rem;
+  color: #1a1a1a;
+  cursor: text;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.stamp-clock {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px;
+  color: #b3aca6;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+/* Held back until the row is hovered so a full table isn't a wall of icons,
+   but always visible to the keyboard. */
+.appointment-table tr:hover .stamp-clock { color: #5f5a56; }
+
+.stamp-clock:hover:not(:disabled) {
+  color: var(--red);
+  border-color: #ded9d5;
+}
+
+.stamp-clock:focus-visible { color: #5f5a56; }
+
+.stamp-clock:disabled { opacity: 0.4; cursor: default; }
+
+/* Typed in place. Sized to match the text it replaces so the row doesn't
+   jump when the cell switches modes. */
+.stamp-input {
+  width: 92px;
+  padding: 6px 8px;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.9rem;
+  text-align: center;
+  color: #1a1a1a;
+  background: #fff;
+  border: 1px solid var(--red);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stamp-input:focus { outline: none; }
+
+/* One colour for every checkbox on both pages. A ticked box means the same
+   thing wherever it appears, so it should not change colour with ownership. */
+.day-of-table input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--red);
+}
+
+/* Shown on the station, owned by the clerk. Kept full-colour rather than
+   greyed: it is real information, not a disabled control. Clicking explains
+   why it cannot be changed here. */
+.day-of-table input.checkbox-readonly { cursor: help; }
+
+.day-of-table input[type="checkbox"]:disabled { cursor: default; }
+
+/* A time that is part of a filed attendance record. Still readable and still
+   clickable — the click raises the explanation. */
+.stamp-text.is-locked { color: #8c8580; cursor: help; }
+
+/* ── Time picker ───────────────────────────────────────────────────── */
+
+/* Fixed and anchored to the click, same as the capacity panel: it must not
+   scroll away from the cursor or be clipped by the table's overflow. */
+.time-panel {
+  position: fixed;
+  z-index: 70;
+  width: 220px;
+  background: #fff;
+  border: 1px solid #1a1a1a;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+}
+
+.time-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 8px var(--space-md);
+  border-bottom: 1px solid #ece9e7;
+}
+
+/* The pending value, so the whole time is legible before it is saved. */
+.time-panel-preview {
+  font-weight: 400;
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Typed entry. Sits above the columns as the primary way in — the columns
+   are for browsing, this is for anyone who already knows the time. */
+.time-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: var(--space-sm) var(--space-md) 0;
+}
+
+.time-field {
+  width: 44px;
+  padding: 7px 0;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 1rem;
+  text-align: center;
+  color: #1a1a1a;
+  background: #faf9f8;
+  border: 1px solid #ddd8d4;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.time-field:focus {
+  outline: none;
+  background: #fff;
+  border-color: var(--red);
+}
+
+.time-entry-colon {
+  font-size: 1rem;
+  color: #8a837d;
+}
+
+.time-meridiem-toggle {
+  margin-left: 4px;
+  padding: 7px 10px;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #5f5a56;
+  background: #fff;
+  border: 1px solid #ddd8d4;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.time-meridiem-toggle:hover {
+  border-color: var(--slate);
+  color: var(--slate);
+}
+
+.time-panel-body {
+  display: flex;
+  gap: 2px;
+  padding: var(--space-sm);
+}
+
+.time-column {
+  flex: 1;
+  max-height: 168px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.time-column::-webkit-scrollbar { display: none; }
+
+/* AM/PM has two values, so it sits at the top rather than stretching. */
+.time-column.meridiem { flex: 0 0 auto; align-self: flex-start; }
+
+.time-option {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.85rem;
+  color: #5f5a56;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.time-option:hover { background: #faf9f8; color: #1a1a1a; }
+
+.time-option.selected {
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+}
+
+.time-panel-actions {
+  display: flex;
+  gap: 6px;
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  border-top: 1px solid #ece9e7;
+}
+
+.time-action {
+  flex: 1;
+  padding: 6px 8px;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.78rem;
+  color: #5f5a56;
+  background: #fff;
+  border: 1px solid #ddd8d4;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.time-action:hover:not(:disabled) {
+  border-color: var(--slate);
+  color: var(--slate);
+}
+
+.time-action.primary {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+.time-action.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  color: #fff;
+}
+
+.time-action:disabled { opacity: 0.5; cursor: default; }
+
+/* A deferred donor still occupies the slot, so the row stays in place and is
+   only muted — not hidden. */
+.appointment-table tr.row-deferred td:not(.period-cell) {
+  background: #fbf7f6;
+  color: #8c8580;
+}
+
+/* Outstanding attendance: arrived, not yet filed. The clerk works down these. */
+.appointment-table tr.row-needs-filing td:not(.period-cell) {
+  background: #fdf8ee;
+}
