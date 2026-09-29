@@ -9,6 +9,8 @@ import TeacherSignUp from "./TeacherSignUp.jsx";
 import CommunityMemberSignUp from "./CommunityMemberSignUp.jsx";
 import CoordinatorsPage from "./CoordinatorsPage.jsx";
 import CoordinatorRegisterPage from "./CoordinatorRegisterPage.jsx";
+import ForgotPasswordPage from "./ForgotPasswordPage.jsx";
+import ResetPasswordPage from "./ResetPasswordPage.jsx";
 import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
 import RequireAuth from "./RequireAuth.jsx";
 import RequirePhaseTwo from "./RequirePhaseTwo.jsx";
@@ -34,6 +36,15 @@ export default function App() {
                 <Route
                     path="/coordinators/register"
                     element={<CoordinatorRegisterPage />}
+                />
+                <Route
+                    path="/coordinators/forgot-password"
+                    element={<ForgotPasswordPage />}
+                />
+                {/* Reached from the link in the reset email. */}
+                <Route
+                    path="/coordinators/reset-password"
+                    element={<ResetPasswordPage />}
                 />
                 <Route
                     path="/coordinators/dashboard"

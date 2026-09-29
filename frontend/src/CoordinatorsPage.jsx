@@ -79,7 +79,11 @@ export default function CoordinatorsPage() {
                         <button type="submit" className="submit-btn" disabled={loading}>
                             {loading ? "Signing in…" : "Sign In"}
                         </button>
-                        <button type="button" className="forgot-password-btn">
+                        <button
+                            type="button"
+                            className="forgot-password-btn"
+                            onClick={() => navigate("/coordinators/forgot-password")}
+                        >
                             Forgot password?
                         </button>
                     </div>

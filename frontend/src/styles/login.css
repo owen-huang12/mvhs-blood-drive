@@ -1,4 +1,8 @@
 /* Login page */
+/* The login pages are a single alabaster screen, so the body's dark grey
+   (base.css) would otherwise show as a band in the overscroll gutter. */
+body:has(.login-page) { background-color: var(--alabaster); }
+
 .login-page {
   min-height: 100vh;
   background-color: var(--alabaster);

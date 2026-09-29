@@ -7,8 +7,8 @@ export default function HomeHero() {
 
     useEffect(() => {
         animate(imageRef.current, {
-            opacity: [0, 1],
             scale: [1.06, 1],
+            opacity: [0, 1],
             duration: 1000,
             ease: "outQuad",
         });

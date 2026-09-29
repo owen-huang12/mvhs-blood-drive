@@ -56,39 +56,38 @@ export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
 export const REQUIRED_CHOICES = 3;
 
 /**
- * Positions available per slot as originally set, taken from the row counts in
- * the appointment spreadsheet. Capacity is not uniform — 8:30 AM seats three,
- * 9:15 AM one. Mirrored by BASE_SLOT_CAPACITY in backend/main.py.
+ * Positions available per slot. Alternates 6, 4, 6, 4... from 8:30 AM, so
+ * every half hour seats ten. Mirrored by BASE_SLOT_CAPACITY in backend/main.py.
  *
  * Coordinators can add positions on top of these but never remove below them,
  * so this doubles as the floor the "−" control stops at. Live capacity comes
  * from the server (`GET /slot-capacity`); this is the fallback until it loads.
  */
 export const BASE_CAPACITY = {
-    "Period 2 - 8:30 AM": 3,
-    "Period 2 - 8:45 AM": 2,
-    "Period 2 - 9:00 AM": 2,
-    "Period 2 - 9:15 AM": 1,
-    "Period 2 - 9:30 AM": 1,
-    "Period 2 - 9:45 AM": 1,
-    "Period 2/Tutorial - 10:00 AM": 2,
-    "Tutorial - 10:15 AM": 3,
-    "Tutorial - 10:30 AM": 2,
-    "Tutorial - 10:45 AM": 2,
-    "Brunch/Period 4 - 11:00 AM": 2,
-    "Period 4 - 11:15 AM": 2,
-    "Period 4 - 11:30 AM": 1,
-    "Period 4 - 11:45 AM": 1,
-    "Period 4 - 12:00 PM": 1,
-    "Period 4 - 12:15 PM": 1,
-    "Period 4/Lunch - 12:30 PM": 2,
-    "Lunch - 12:45 PM": 2,
-    "Lunch - 1:00 PM": 2,
-    "Lunch/Period 6 - 1:15 PM": 2,
-    "Period 6 - 1:30 PM": 3,
-    "Period 6 - 1:45 PM": 2,
-    "Period 6 - 2:00 PM": 2,
-    "Period 6 - 2:15 PM": 2,
+    "Period 2 - 8:30 AM": 6,
+    "Period 2 - 8:45 AM": 4,
+    "Period 2 - 9:00 AM": 6,
+    "Period 2 - 9:15 AM": 4,
+    "Period 2 - 9:30 AM": 6,
+    "Period 2 - 9:45 AM": 4,
+    "Period 2/Tutorial - 10:00 AM": 6,
+    "Tutorial - 10:15 AM": 4,
+    "Tutorial - 10:30 AM": 6,
+    "Tutorial - 10:45 AM": 4,
+    "Brunch/Period 4 - 11:00 AM": 6,
+    "Period 4 - 11:15 AM": 4,
+    "Period 4 - 11:30 AM": 6,
+    "Period 4 - 11:45 AM": 4,
+    "Period 4 - 12:00 PM": 6,
+    "Period 4 - 12:15 PM": 4,
+    "Period 4/Lunch - 12:30 PM": 6,
+    "Lunch - 12:45 PM": 4,
+    "Lunch - 1:00 PM": 6,
+    "Lunch/Period 6 - 1:15 PM": 4,
+    "Period 6 - 1:30 PM": 6,
+    "Period 6 - 1:45 PM": 4,
+    "Period 6 - 2:00 PM": 6,
+    "Period 6 - 2:15 PM": 4,
 };
 
 const DEFAULT_CAPACITY = 1;

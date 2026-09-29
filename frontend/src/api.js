@@ -152,6 +152,13 @@ export async function openSignUpStream({ signal, onEvent }) {
     }
 }
 
+/** Always resolves the same way, whether or not the account exists. */
+export const requestPasswordReset = (email) =>
+    request("/forgot-password", { method: "POST", body: { email } });
+
+export const resetPassword = (token, password) =>
+    request("/reset-password", { method: "POST", body: { token, password } });
+
 export const login = (email, password) =>
     request("/login", {
         method: "POST",

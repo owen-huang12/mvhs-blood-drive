@@ -1,12 +1,15 @@
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
+import hashlib
+import html
 import json
+import logging
 import os
 import secrets
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -14,6 +17,7 @@ from jose import JWTError, jwt
 import bcrypt
 from pydantic import BaseModel, field_validator
 import psycopg2
+import resend
 
 load_dotenv()
 
@@ -27,6 +31,28 @@ ACCESS_TOKEN_EXPIRE_HOURS = 12
 COORDINATOR_INVITE_CODE = os.environ.get("COORDINATOR_INVITE_CODE")
 
 MIN_PASSWORD_LENGTH = 8
+
+# Password reset email, sent through Resend. The from address must be on the
+# domain verified in the Resend dashboard. With no API key set, the reset link
+# is logged instead of emailed (outside production only), so the flow can be
+# tested locally without sending anything.
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+EMAIL_FROM = os.environ.get(
+    "EMAIL_FROM", "MVHS Blood Drive <noreply@mvhsblooddrive.com>"
+)
+# Where the reset link in the email points.
+FRONTEND_URL = os.environ.get(
+    "FRONTEND_URL",
+    "https://mvhs-blood-drive.vercel.app"
+    if os.environ.get("APP_ENV") == "production"
+    else "http://localhost:5173",
+).rstrip("/")
+
+RESET_TOKEN_EXPIRE_MINUTES = 30
+# Per account, per hour. Stops the endpoint being used to flood someone's inbox.
+MAX_RESET_REQUESTS_PER_HOUR = 3
+
+logger = logging.getLogger("uvicorn.error")
 
 # Day-of features (check-in times, deferral, attendance) stay closed until two
 # days before the drive. The date is the real boundary, not just a hidden
@@ -116,6 +142,7 @@ async def lifespan(_: FastAPI):
     _ensure_slot_capacity_table()
     _ensure_participant_type_column()
     _ensure_day_of_columns()
+    _ensure_password_reset_table()
     yield
 
 
@@ -154,9 +181,8 @@ def verify_password(password: str, hashed: str) -> bool:
 def _assert_invite_code(code: str) -> None:
     """Gate coordinator self-registration behind the shared invite code.
 
-    Without this, /coordinator is open to anyone who finds the endpoint — the
-    POST mints accounts and the PUT overwrites an existing coordinator's
-    password by email. compare_digest keeps the check constant-time so the
+    Without this, /coordinator is open to anyone who finds the endpoint and
+    can mint accounts. compare_digest keeps the check constant-time so the
     endpoint can't be used to guess the code a character at a time.
     """
     if not COORDINATOR_INVITE_CODE:
@@ -220,6 +246,13 @@ class CoordinatorPublic(BaseModel):
 
 class InviteCode(BaseModel):
     invite_code: str
+
+class ForgotPassword(BaseModel):
+    email: str
+
+class ResetPassword(BaseModel):
+    token: str
+    password: str
 
 class Token(BaseModel):
     access_token: str
@@ -433,21 +466,148 @@ def create_coordinator(coordinator: CoordinatorCreate):
     return CoordinatorPublic(full_name=full_name, email=email)
 
 
-@app.put("/coordinator", response_model=CoordinatorPublic)
-def update_coordinator(coordinator: CoordinatorCreate):
-    _assert_invite_code(coordinator.invite_code)
-    hashed = hash_password(coordinator.password)
+# ── Password reset ──────────────────────────────────────────────────────
+
+def _ensure_password_reset_table() -> None:
+    """Create the reset token table if it isn't there yet.
+
+    Only a SHA-256 of each token is stored, so a leaked copy of the table
+    can't be turned into working reset links.
+    """
     with db_cursor(commit=True) as cur:
         cur.execute(
-            """INSERT INTO coordinators (full_name, email, password_hash)
-               VALUES (%s, %s, %s)
-               ON CONFLICT (email) DO UPDATE
-               SET full_name = EXCLUDED.full_name,
-                   password_hash = EXCLUDED.password_hash
-            """,
-            (coordinator.full_name, coordinator.email, hashed)
+            """CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                   token_hash TEXT PRIMARY KEY,
+                   email      TEXT NOT NULL,
+                   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                   expires_at TIMESTAMPTZ NOT NULL,
+                   used_at    TIMESTAMPTZ
+               )"""
         )
-    return CoordinatorPublic(full_name=coordinator.full_name, email=coordinator.email)
+
+
+def _hash_reset_token(token: str) -> str:
+    # A plain hash (not bcrypt) is enough here: the token is 256 random bits,
+    # so there is nothing to brute-force, and it has to be looked up by value.
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _send_reset_email(to: str, full_name: str, link: str) -> None:
+    """Email the reset link. Runs as a background task, after the response."""
+    if not RESEND_API_KEY:
+        if os.environ.get("APP_ENV") == "production":
+            logger.error("RESEND_API_KEY is not set; no reset email sent.")
+        else:
+            logger.warning("RESEND_API_KEY is not set. Reset link for %s: %s", to, link)
+        return
+
+    first_name = full_name.split()[0] if full_name.strip() else "there"
+    try:
+        resend.api_key = RESEND_API_KEY
+        resend.Emails.send({
+            "from": EMAIL_FROM,
+            "to": [to],
+            "subject": "Reset your MVHS Blood Drive password",
+            "html": (
+                f"<p>Hi {html.escape(first_name)},</p>"
+                "<p>Someone asked to reset the password for your MVHS Blood "
+                "Drive coordinator account. Use the link below to choose a new "
+                f"one. It expires in {RESET_TOKEN_EXPIRE_MINUTES} minutes.</p>"
+                f'<p><a href="{html.escape(link)}">Reset your password</a></p>'
+                "<p>If you didn't ask for this, you can ignore this email and "
+                "your password will stay the same.</p>"
+            ),
+            "text": (
+                f"Hi {first_name},\n\n"
+                "Someone asked to reset the password for your MVHS Blood Drive "
+                "coordinator account. Use the link below to choose a new one. "
+                f"It expires in {RESET_TOKEN_EXPIRE_MINUTES} minutes.\n\n"
+                f"{link}\n\n"
+                "If you didn't ask for this, you can ignore this email and your "
+                "password will stay the same.\n"
+            ),
+        })
+    except Exception:
+        # Nothing to report back to: the response has already gone out, and it
+        # says the same thing whether or not an email is sent.
+        logger.exception("Could not send the password reset email to %s", to)
+
+
+@app.post("/forgot-password")
+def forgot_password(body: ForgotPassword, background: BackgroundTasks):
+    """Email a reset link, if an account exists for the address.
+
+    The response is the same either way, and the email goes out in the
+    background, so neither the reply nor its timing reveals which addresses
+    have accounts.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "SELECT email, full_name FROM coordinators WHERE LOWER(email) = LOWER(%s)",
+            (body.email.strip(),),
+        )
+        row = cur.fetchone()
+
+        if row is not None:
+            email, full_name = row
+            cur.execute(
+                """SELECT COUNT(*) FROM password_reset_tokens
+                   WHERE email = %s AND created_at > NOW() - INTERVAL '1 hour'""",
+                (email,),
+            )
+            if cur.fetchone()[0] < MAX_RESET_REQUESTS_PER_HOUR:
+                token = secrets.token_urlsafe(32)
+                cur.execute(
+                    """INSERT INTO password_reset_tokens (token_hash, email, expires_at)
+                       VALUES (%s, %s, NOW() + %s * INTERVAL '1 minute')""",
+                    (_hash_reset_token(token), email, RESET_TOKEN_EXPIRE_MINUTES),
+                )
+                link = f"{FRONTEND_URL}/coordinators/reset-password?token={token}"
+                background.add_task(_send_reset_email, email, full_name, link)
+
+    return {"message": "If an account exists for that email, a reset link is on its way."}
+
+
+@app.post("/reset-password")
+def reset_password(body: ResetPassword):
+    """Set a new password using a link from /forgot-password.
+
+    A token works once. Using it also retires every other outstanding link for
+    the account, so an older email left in an inbox can't be used afterwards.
+    """
+    if len(body.password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
+        )
+
+    with db_cursor(commit=True) as cur:
+        # Locked so two submits of the same link can't both succeed.
+        cur.execute(
+            """SELECT email FROM password_reset_tokens
+               WHERE token_hash = %s AND used_at IS NULL AND expires_at > NOW()
+               FOR UPDATE""",
+            (_hash_reset_token(body.token.strip()),),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=400,
+                detail="This reset link is invalid or has expired. Request a new one.",
+            )
+
+        email = row[0]
+        cur.execute(
+            "UPDATE coordinators SET password_hash = %s WHERE email = %s",
+            (hash_password(body.password), email),
+        )
+        cur.execute(
+            """UPDATE password_reset_tokens SET used_at = NOW()
+               WHERE email = %s AND used_at IS NULL""",
+            (email,),
+        )
+
+    return {"message": "Your password has been reset."}
 
 
 MIN_SIGN_UP_AGE = 16
@@ -647,38 +807,38 @@ def list_sign_ups(_: str = Depends(get_current_coordinator)):
     return [_row_to_sign_up(row) for row in rows]
 
 
-# Positions available per slot as originally set from the appointment
-# spreadsheet's row counts. Capacity is not uniform. Mirrored by BASE_CAPACITY
-# in frontend/src/timeSlots.js.
+# Positions available per slot. Alternates 6, 4, 6, 4... from 8:30 AM, so
+# every half hour seats ten. Mirrored by BASE_CAPACITY in
+# frontend/src/timeSlots.js.
 #
 # Coordinators may add positions on top of these, but never remove below them:
 # this is the floor the drive was planned around, so it is the lower bound
 # enforced by /slot-capacity.
 BASE_SLOT_CAPACITY = {
-    "Period 2 - 8:30 AM": 3,
-    "Period 2 - 8:45 AM": 2,
-    "Period 2 - 9:00 AM": 2,
-    "Period 2 - 9:15 AM": 1,
-    "Period 2 - 9:30 AM": 1,
-    "Period 2 - 9:45 AM": 1,
-    "Period 2/Tutorial - 10:00 AM": 2,
-    "Tutorial - 10:15 AM": 3,
-    "Tutorial - 10:30 AM": 2,
-    "Tutorial - 10:45 AM": 2,
-    "Brunch/Period 4 - 11:00 AM": 2,
-    "Period 4 - 11:15 AM": 2,
-    "Period 4 - 11:30 AM": 1,
-    "Period 4 - 11:45 AM": 1,
-    "Period 4 - 12:00 PM": 1,
-    "Period 4 - 12:15 PM": 1,
-    "Period 4/Lunch - 12:30 PM": 2,
-    "Lunch - 12:45 PM": 2,
-    "Lunch - 1:00 PM": 2,
-    "Lunch/Period 6 - 1:15 PM": 2,
-    "Period 6 - 1:30 PM": 3,
-    "Period 6 - 1:45 PM": 2,
-    "Period 6 - 2:00 PM": 2,
-    "Period 6 - 2:15 PM": 2,
+    "Period 2 - 8:30 AM": 6,
+    "Period 2 - 8:45 AM": 4,
+    "Period 2 - 9:00 AM": 6,
+    "Period 2 - 9:15 AM": 4,
+    "Period 2 - 9:30 AM": 6,
+    "Period 2 - 9:45 AM": 4,
+    "Period 2/Tutorial - 10:00 AM": 6,
+    "Tutorial - 10:15 AM": 4,
+    "Tutorial - 10:30 AM": 6,
+    "Tutorial - 10:45 AM": 4,
+    "Brunch/Period 4 - 11:00 AM": 6,
+    "Period 4 - 11:15 AM": 4,
+    "Period 4 - 11:30 AM": 6,
+    "Period 4 - 11:45 AM": 4,
+    "Period 4 - 12:00 PM": 6,
+    "Period 4 - 12:15 PM": 4,
+    "Period 4/Lunch - 12:30 PM": 6,
+    "Lunch - 12:45 PM": 4,
+    "Lunch - 1:00 PM": 6,
+    "Lunch/Period 6 - 1:15 PM": 4,
+    "Period 6 - 1:30 PM": 6,
+    "Period 6 - 1:45 PM": 4,
+    "Period 6 - 2:00 PM": 6,
+    "Period 6 - 2:15 PM": 4,
 }
 
 DEFAULT_CAPACITY = 1
@@ -770,6 +930,16 @@ def _base_capacity(time_slot: str) -> int:
     return BASE_SLOT_CAPACITY.get(time_slot, DEFAULT_CAPACITY)
 
 
+def _effective_capacity(time_slot: str, override: int | None) -> int:
+    """A coordinator override, but never below the base.
+
+    Overrides are stored as absolute numbers, so one saved before the base was
+    raised would otherwise pull the slot back under its new floor.
+    """
+    base = _base_capacity(time_slot)
+    return base if override is None else max(override, base)
+
+
 def _capacity_overrides(cur) -> dict[str, int]:
     """Coordinator-set capacities, keyed by slot. Absent means "use the base"."""
     cur.execute("SELECT time_slot, capacity FROM slot_capacity")
@@ -781,7 +951,7 @@ def _capacity_for(cur, time_slot: str) -> int:
         "SELECT capacity FROM slot_capacity WHERE time_slot = %s", (time_slot,)
     )
     row = cur.fetchone()
-    return row[0] if row is not None else _base_capacity(time_slot)
+    return _effective_capacity(time_slot, row[0] if row is not None else None)
 
 
 def _assert_slot_has_room(cur, time_slot: str, moving_id: int) -> None:
@@ -810,7 +980,7 @@ def list_slot_capacity(_: str = Depends(get_current_coordinator)):
     with db_cursor() as cur:
         overrides = _capacity_overrides(cur)
     return {
-        slot: overrides.get(slot, _base_capacity(slot))
+        slot: _effective_capacity(slot, overrides.get(slot))
         for slot in VALID_TIME_SLOTS
     }
 
@@ -841,7 +1011,7 @@ def set_slot_capacity(
             (time_slot,),
         )
         row = cur.fetchone()
-        current = row[0] if row is not None else base
+        current = _effective_capacity(time_slot, row[0] if row is not None else None)
         target = current + change.delta
 
         if target < base:
