@@ -2,11 +2,69 @@ import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, signUpStudent } from "./api.js";
 
-/** Donors under this age have to bring a signed parent consent form. */
+/**
+ * Donors under this age have to bring a signed parent consent form.
+ * Mirrored by CONSENT_REQUIRED_UNDER_AGE in backend/main.py.
+ */
 const CONSENT_REQUIRED_UNDER = 18;
 
-// TODO: point this at the real parent consent form once it exists.
-const PARENT_CONSENT_FORM_URL = "#";
+// Stanford Blood Center's form, served from frontend/public/.
+const CONSENT_FORMS = [
+    { label: "Consent form (English)", href: "/05-FX1-Consent-for-Minor-to-Donate-Blood-Eng.pdf" },
+    { label: "Formulario de consentimiento (Español)", href: "/05-FX1S-Consent-for-Minor-to-Donate-Blood-Sp.pdf" },
+];
+
+/** Box with an arrow out of it: the PDF opens in a new tab. */
+const ExternalLinkIcon = (
+    <svg
+        className="external-link-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+    >
+        <path d="M14 4h6v6" />
+        <path d="M20 4 10 14" />
+        <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </svg>
+);
+
+/**
+ * What an under-age donor has to do with the consent form, and the links to it.
+ *
+ * Shown before and after confirming: Stanford Blood Center turns a minor away
+ * without a correctly signed paper copy, so this can't be a one-time mention.
+ */
+function ConsentFormNotice() {
+    return (
+        <>
+            <p className="form-prompt">
+                You'll need to bring a signed parent consent form to your
+                appointment. Print the form, have your parent or legal guardian
+                fill out Section 1, and fill out Section 2 yourself. Both
+                signatures must be in blue or black ballpoint pen.{" "}
+                <strong>You won't be allowed to donate without it.</strong>
+            </p>
+            <div className="consent-form-links">
+                {CONSENT_FORMS.map(({ label, href }) => (
+                    <a
+                        key={href}
+                        className="consent-form-link"
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        {label}
+                        {ExternalLinkIcon}
+                    </a>
+                ))}
+            </div>
+        </>
+    );
+}
 
 /**
  * Final step of the student sign-up: review, agree, confirm.
@@ -62,6 +120,7 @@ export default function CompletedStudentForm() {
                             <strong>{signUp.email_address}</strong> by 8/12 at
                             2:30 PM.
                         </p>
+                        {needsConsentForm && <ConsentFormNotice />}
                         <Link to="/" className="submit-btn">
                             Back to home
                         </Link>
@@ -84,9 +143,7 @@ export default function CompletedStudentForm() {
 
                     {needsConsentForm && (
                         <div className="consent-block">
-                            <p className="consent-prompt">
-                                Please agree to the following:
-                            </p>
+                            <ConsentFormNotice />
 
                             <label className="consent-check">
                                 <input
@@ -94,18 +151,11 @@ export default function CompletedStudentForm() {
                                     checked={agreed}
                                     onChange={(e) => setAgreed(e.target.checked)}
                                 />
-                                I will complete the parent consent form. I will
-                                bring it to my scheduled appointment.
+                                I understand that I must bring the consent form,
+                                signed by my parent or guardian and by me, to my
+                                appointment, and that I will not be allowed to
+                                donate without it.
                             </label>
-
-                            <a
-                                className="consent-form-link"
-                                href={PARENT_CONSENT_FORM_URL}
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                Open the parent consent form
-                            </a>
                         </div>
                     )}
 

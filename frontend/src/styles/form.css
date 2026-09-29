@@ -114,12 +114,6 @@
   margin-bottom: var(--space-lg);
 }
 
-.consent-prompt {
-  font-size: 1rem;
-  color: #1a1a1a;
-  line-height: 1.65;
-}
-
 /* Same card-with-a-control shape as .grade-radio, so the two read as one
    family. Wrapped in the label so the text is part of the hit area. */
 .consent-check {
@@ -173,10 +167,23 @@
   background-repeat: no-repeat;
 }
 
+.consent-form-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+/* Inside .consent-block, the block's own gap does the spacing. */
+.consent-block .form-prompt,
+.consent-block .consent-form-links { margin-bottom: 0; }
+
 /* Outlined rather than solid: the coral fill is reserved for the primary
    action on the page ("Back to home"). */
 .consent-form-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 0.95rem;
   text-decoration: none;
@@ -190,6 +197,9 @@
 }
 
 .consent-form-link:hover { background-color: var(--coral); color: #fff; }
+
+/* Stroked in currentColor, so it turns white with the text on hover. */
+.external-link-icon { width: 15px; height: 15px; flex-shrink: 0; }
 
 /* Confirm sits beside a plain-text escape hatch back to the form. */
 .confirm-actions {

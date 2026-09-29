@@ -1,4 +1,5 @@
 import asyncio
+import base64
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -6,6 +7,7 @@ import html
 import json
 import logging
 import os
+from pathlib import Path
 import secrets
 
 from dotenv import load_dotenv
@@ -40,12 +42,12 @@ RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 EMAIL_FROM = os.environ.get(
     "EMAIL_FROM", "MVHS Blood Drive <noreply@mvhsblooddrive.com>"
 )
-# Where the reset link in the email points.
+# Where the reset link in the email points. Defaults to the live site even when
+# running locally: the email goes to a real inbox, and the database is shared,
+# so the link works there. Set FRONTEND_URL=http://localhost:5173 to test the
+# reset page against a local frontend instead.
 FRONTEND_URL = os.environ.get(
-    "FRONTEND_URL",
-    "https://mvhs-blood-drive.vercel.app"
-    if os.environ.get("APP_ENV") == "production"
-    else "http://localhost:5173",
+    "FRONTEND_URL", "https://mvhs-blood-drive.vercel.app"
 ).rstrip("/")
 
 RESET_TOKEN_EXPIRE_MINUTES = 30
@@ -492,45 +494,71 @@ def _hash_reset_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _send_reset_email(to: str, full_name: str, link: str) -> None:
-    """Email the reset link. Runs as a background task, after the response."""
+def _send_email(
+    to: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    attachments: list[dict] | None = None,
+) -> None:
+    """Send one email through Resend. Runs as a background task.
+
+    Failures are logged, not raised: by the time this runs the response has
+    already gone out, so there is no one to report them to.
+    """
     if not RESEND_API_KEY:
         if os.environ.get("APP_ENV") == "production":
-            logger.error("RESEND_API_KEY is not set; no reset email sent.")
+            logger.error("RESEND_API_KEY is not set; no email sent to %s.", to)
         else:
-            logger.warning("RESEND_API_KEY is not set. Reset link for %s: %s", to, link)
+            logger.warning(
+                "RESEND_API_KEY is not set. Email to %s (%s):\n%s", to, subject, text_body
+            )
         return
 
-    first_name = full_name.split()[0] if full_name.strip() else "there"
+    params = {
+        "from": EMAIL_FROM,
+        "to": [to],
+        "subject": subject,
+        "html": html_body,
+        "text": text_body,
+    }
+    if attachments:
+        params["attachments"] = attachments
     try:
         resend.api_key = RESEND_API_KEY
-        resend.Emails.send({
-            "from": EMAIL_FROM,
-            "to": [to],
-            "subject": "Reset your MVHS Blood Drive password",
-            "html": (
-                f"<p>Hi {html.escape(first_name)},</p>"
-                "<p>Someone asked to reset the password for your MVHS Blood "
-                "Drive coordinator account. Use the link below to choose a new "
-                f"one. It expires in {RESET_TOKEN_EXPIRE_MINUTES} minutes.</p>"
-                f'<p><a href="{html.escape(link)}">Reset your password</a></p>'
-                "<p>If you didn't ask for this, you can ignore this email and "
-                "your password will stay the same.</p>"
-            ),
-            "text": (
-                f"Hi {first_name},\n\n"
-                "Someone asked to reset the password for your MVHS Blood Drive "
-                "coordinator account. Use the link below to choose a new one. "
-                f"It expires in {RESET_TOKEN_EXPIRE_MINUTES} minutes.\n\n"
-                f"{link}\n\n"
-                "If you didn't ask for this, you can ignore this email and your "
-                "password will stay the same.\n"
-            ),
-        })
+        resend.Emails.send(params)
     except Exception:
-        # Nothing to report back to: the response has already gone out, and it
-        # says the same thing whether or not an email is sent.
-        logger.exception("Could not send the password reset email to %s", to)
+        logger.exception("Could not send %r to %s", subject, to)
+
+
+def _first_name(full_name: str) -> str:
+    return full_name.split()[0] if full_name.strip() else "there"
+
+
+def _send_reset_email(to: str, full_name: str, link: str) -> None:
+    first_name = _first_name(full_name)
+    _send_email(
+        to,
+        "Reset your MVHS Blood Drive password",
+        (
+            f"<p>Hi {html.escape(first_name)},</p>"
+            "<p>Someone asked to reset the password for your MVHS Blood "
+            "Drive coordinator account. Use the link below to choose a new "
+            f"one. It expires in {RESET_TOKEN_EXPIRE_MINUTES} minutes.</p>"
+            f'<p><a href="{html.escape(link)}">Reset your password</a></p>'
+            "<p>If you didn't ask for this, you can ignore this email and "
+            "your password will stay the same.</p>"
+        ),
+        (
+            f"Hi {first_name},\n\n"
+            "Someone asked to reset the password for your MVHS Blood Drive "
+            "coordinator account. Use the link below to choose a new one. "
+            f"It expires in {RESET_TOKEN_EXPIRE_MINUTES} minutes.\n\n"
+            f"{link}\n\n"
+            "If you didn't ask for this, you can ignore this email and your "
+            "password will stay the same.\n"
+        ),
+    )
 
 
 @app.post("/forgot-password")
@@ -694,15 +722,114 @@ def _insert_sign_up(
     return created
 
 
+# ── Sign-up confirmation email ─────────────────────────────────────────
+
+# Students under this age must bring a signed parent consent form. Mirrors
+# CONSENT_REQUIRED_UNDER in frontend/src/CompletedStudentForm.jsx.
+CONSENT_REQUIRED_UNDER_AGE = 18
+
+# Stanford Blood Center's consent form, attached to the confirmation email.
+# Copies of the PDFs in frontend/public/: the backend is deployed on its own
+# and can't reach those. Replace both copies together if SBC issues a new
+# version, since they only accept the current one.
+CONSENT_FORM_DIR = Path(__file__).parent / "attachments"
+CONSENT_FORM_FILES = (
+    "05-FX1-Consent-for-Minor-to-Donate-Blood-Eng.pdf",
+    "05-FX1S-Consent-for-Minor-to-Donate-Blood-Sp.pdf",
+)
+
+
+def _consent_form_attachments() -> list[dict]:
+    return [
+        {
+            "filename": name,
+            "content": base64.b64encode((CONSENT_FORM_DIR / name).read_bytes()).decode(),
+        }
+        for name in CONSENT_FORM_FILES
+    ]
+
+
+def _send_sign_up_email(sign_up: SignUpRow) -> None:
+    """Confirm a new sign-up, with the consent form attached for minors."""
+    needs_consent = (
+        sign_up.participant_type == "student"
+        and sign_up.age < CONSENT_REQUIRED_UNDER_AGE
+    )
+    first_name = _first_name(sign_up.full_name)
+    choices = (sign_up.first_choice, sign_up.second_choice, sign_up.third_choice)
+    labels = ("1st choice", "2nd choice", "3rd choice")
+
+    html_body = (
+        f"<p>Hi {html.escape(first_name)},</p>"
+        "<p>Thanks for signing up for the MVHS Stanford Blood Drive. "
+        "These are the times you asked for:</p>"
+        "<ul>"
+        + "".join(
+            f"<li>{label}: {html.escape(choice)}</li>"
+            for label, choice in zip(labels, choices)
+        )
+        + "</ul>"
+        "<p>A coordinator will assign you one of these times, and we'll email "
+        "you once it's set.</p>"
+    )
+    text_body = (
+        f"Hi {first_name},\n\n"
+        "Thanks for signing up for the MVHS Stanford Blood Drive. "
+        "These are the times you asked for:\n\n"
+        + "".join(f"  {label}: {choice}\n" for label, choice in zip(labels, choices))
+        + "\nA coordinator will assign you one of these times, and we'll email "
+        "you once it's set.\n"
+    )
+
+    if needs_consent:
+        html_body += (
+            "<p><strong>You must bring a signed parent consent form to your "
+            "appointment, or you won't be allowed to donate.</strong> The form "
+            "is attached in English and Spanish.</p>"
+            "<ol>"
+            "<li>Print the form.</li>"
+            "<li>Have your parent or legal guardian fill out and sign Section 1.</li>"
+            "<li>Fill out and sign Section 2 yourself.</li>"
+            "<li>Bring the signed paper form with you to your appointment.</li>"
+            "</ol>"
+            "<p>Both signatures must be in blue or black ballpoint pen. "
+            "Pencil, marker, other ink colors and correction fluid aren't "
+            "accepted, and a form filled out that way won't count.</p>"
+        )
+        text_body += (
+            "\nYOU MUST BRING A SIGNED PARENT CONSENT FORM TO YOUR APPOINTMENT, "
+            "OR YOU WON'T BE ALLOWED TO DONATE. The form is attached in English "
+            "and Spanish.\n\n"
+            "  1. Print the form.\n"
+            "  2. Have your parent or legal guardian fill out and sign Section 1.\n"
+            "  3. Fill out and sign Section 2 yourself.\n"
+            "  4. Bring the signed paper form with you to your appointment.\n\n"
+            "Both signatures must be in blue or black ballpoint pen. Pencil, "
+            "marker, other ink colors and correction fluid aren't accepted, and "
+            "a form filled out that way won't count.\n"
+        )
+
+    html_body += "<p>See you at the drive,<br>MVHS Blood Drive</p>"
+    text_body += "\nSee you at the drive,\nMVHS Blood Drive\n"
+
+    _send_email(
+        sign_up.email_address,
+        "You're signed up for the MVHS Blood Drive",
+        html_body,
+        text_body,
+        _consent_form_attachments() if needs_consent else None,
+    )
+
+
 @app.post('/student-sign-up')
-def create_student_sign_up(sign_up: StudentSignUp):
+def create_student_sign_up(sign_up: StudentSignUp, background: BackgroundTasks):
     if sign_up.age < MIN_SIGN_UP_AGE:
         raise HTTPException(
             status_code=400,
             detail=f"Must be at least {MIN_SIGN_UP_AGE} years old to sign up.",
         )
 
-    return _insert_sign_up(
+    created = _insert_sign_up(
         full_name=sign_up.full_name,
         email_address=sign_up.email_address,
         participant_type="student",
@@ -713,16 +840,18 @@ def create_student_sign_up(sign_up: StudentSignUp):
         second_choice=sign_up.second_choice,
         third_choice=sign_up.third_choice,
     )
+    background.add_task(_send_sign_up_email, created)
+    return created
 
 
 @app.post('/adult-sign-up')
-def create_adult_sign_up(sign_up: AdultSignUp):
+def create_adult_sign_up(sign_up: AdultSignUp, background: BackgroundTasks):
     """Register a teacher or community member.
 
     They give only a name, an email and three choices; the student-only
     columns are stored blank (see NO_STUDENT_ID and friends).
     """
-    return _insert_sign_up(
+    created = _insert_sign_up(
         full_name=sign_up.full_name,
         email_address=sign_up.email_address,
         participant_type=sign_up.participant_type,
@@ -733,6 +862,8 @@ def create_adult_sign_up(sign_up: AdultSignUp):
         second_choice=sign_up.second_choice,
         third_choice=sign_up.third_choice,
     )
+    background.add_task(_send_sign_up_email, created)
+    return created
 
 
 SIGN_UP_COLUMNS = """
