@@ -33,61 +33,63 @@ export default function TimeSlotChoices({ selected, onChange }) {
                 your 1st, 2nd, and 3rd choice.
             </p>
 
-            <table className="timeslot-table">
-                <thead>
-                    <tr>
-                        <th>Period</th>
-                        <th>Time slot</th>
-                        <th className="timeslot-choice-col">Your choice</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {TIME_SLOTS.map((slot) => {
-                        const slotKey = formatSlot(slot);
-                        const rank = selected.indexOf(slotKey);
-                        const isSelected = rank !== -1;
-                        const colors = colorsForPeriod(slot.period);
-                        const select = () => toggle(slotKey);
-
-                        return (
-                            <tr
-                                key={slotKey}
-                                className={`timeslot-row${isSelected ? " selected" : ""}`}
-                                role="button"
-                                aria-pressed={isSelected}
-                                tabIndex={0}
-                                onClick={select}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                        e.preventDefault();
-                                        select();
-                                    }
-                                }}
-                            >
-                                <td>
-                                    <span
-                                        className="timeslot-period"
-                                        style={{
-                                            backgroundColor: colors.bg,
-                                            color: colors.text,
-                                        }}
-                                    >
-                                        {slot.period}
-                                    </span>
-                                </td>
-                                <td className="timeslot-time">{slot.time}</td>
-                                <td className="timeslot-choice-col">
-                                    {isSelected && (
-                                        <span className="timeslot-rank">
-                                            {CHOICE_LABELS[rank]}
+            <div className="table-scroll">
+                <table className="timeslot-table">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Time slot</th>
+                            <th className="timeslot-choice-col">Your choice</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {TIME_SLOTS.map((slot) => {
+                            const slotKey = formatSlot(slot);
+                            const rank = selected.indexOf(slotKey);
+                            const isSelected = rank !== -1;
+                            const colors = colorsForPeriod(slot.period);
+                            const select = () => toggle(slotKey);
+    
+                            return (
+                                <tr
+                                    key={slotKey}
+                                    className={`timeslot-row${isSelected ? " selected" : ""}`}
+                                    role="button"
+                                    aria-pressed={isSelected}
+                                    tabIndex={0}
+                                    onClick={select}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            select();
+                                        }
+                                    }}
+                                >
+                                    <td>
+                                        <span
+                                            className="timeslot-period"
+                                            style={{
+                                                backgroundColor: colors.bg,
+                                                color: colors.text,
+                                            }}
+                                        >
+                                            {slot.period}
                                         </span>
-                                    )}
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+                                    </td>
+                                    <td className="timeslot-time">{slot.time}</td>
+                                    <td className="timeslot-choice-col">
+                                        {isSelected && (
+                                            <span className="timeslot-rank">
+                                                {CHOICE_LABELS[rank]}
+                                            </span>
+                                        )}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
         </>
     );
 }

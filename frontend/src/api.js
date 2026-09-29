@@ -1,4 +1,4 @@
-import { getToken } from "./auth.js";
+import { endSession, getToken } from "./auth.js";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -23,6 +23,8 @@ async function request(path, { method = "GET", body, form, auth = false } = {}) 
         headers,
         body: body ? JSON.stringify(body) : form,
     });
+
+    if (res.status === 401 && auth) endSession();
 
     if (!res.ok) {
         // FastAPI puts the human-readable reason in `detail`; surface it so
@@ -125,12 +127,13 @@ function parseFrame(frame) {
  * Uses `fetch` rather than `EventSource` because the endpoint is authenticated
  * and `EventSource` cannot send an Authorization header.
  */
-export async function openSignUpStream({ signal, onEvent }) {
+export async function openSignUpStream({ signal, onEvent, onActivity }) {
     const res = await fetch(`${BASE_URL}/events`, {
         headers: { Authorization: `Bearer ${getToken()}` },
         signal,
     });
     if (!res.ok) throw new ApiError(res.status, `Stream failed: ${res.status}`);
+    onActivity?.();
 
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
@@ -138,6 +141,9 @@ export async function openSignUpStream({ signal, onEvent }) {
     while (true) {
         const { done, value } = await reader.read();
         if (done) return;
+        // Any bytes at all, keepalive comments included, prove the
+        // connection is still alive.
+        onActivity?.();
 
         buffer += value;
         // A frame ends at a blank line; a read can deliver several, or half of

@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from collections import deque
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -9,16 +10,21 @@ import logging
 import os
 from pathlib import Path
 import secrets
+import threading
+import time
+from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 import bcrypt
-from pydantic import BaseModel, field_validator
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, StringConstraints, field_validator
 import psycopg2
+import psycopg2.errors
 import resend
 
 load_dotenv()
@@ -33,6 +39,8 @@ ACCESS_TOKEN_EXPIRE_HOURS = 12
 COORDINATOR_INVITE_CODE = os.environ.get("COORDINATOR_INVITE_CODE")
 
 MIN_PASSWORD_LENGTH = 8
+# bcrypt only reads the first 72 bytes, and bcrypt 5 raises past that.
+MAX_PASSWORD_BYTES = 72
 
 # Password reset email, sent through Resend. The from address must be on the
 # domain verified in the Resend dashboard. With no API key set, the reset link
@@ -145,6 +153,7 @@ async def lifespan(_: FastAPI):
     _ensure_participant_type_column()
     _ensure_day_of_columns()
     _ensure_password_reset_table()
+    _ensure_unique_constraints()
     yield
 
 
@@ -172,11 +181,112 @@ app.add_middleware(
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
+
+class RateLimiter:
+    """Sliding-window request counts per client, held in memory.
+
+    In-process, so it relies on the single worker the Procfile pins, and it
+    resets on restart. That's fine: it exists to blunt scripted abuse of the
+    public routes, not to account for anything.
+    """
+
+    def __init__(self) -> None:
+        self._hits: dict[tuple[str, str], deque] = {}
+        self._lock = threading.Lock()
+
+    def hit(self, key: tuple[str, str], limit: int, window: float) -> bool:
+        """Record one request. False if it goes over `limit` per `window` seconds."""
+        now = time.monotonic()
+        with self._lock:
+            hits = self._hits.setdefault(key, deque())
+            while hits and hits[0] <= now - window:
+                hits.popleft()
+            if len(hits) >= limit:
+                return False
+            hits.append(now)
+            # Drop idle clients now and then so the map can't grow forever.
+            if len(self._hits) > 10_000:
+                self._hits = {k: v for k, v in self._hits.items() if v}
+            return True
+
+
+limiter = RateLimiter()
+
+
+def _client_ip(request: Request) -> str:
+    """The caller's IP. Behind Railway's proxy every request comes from the
+    proxy, so the real client is the last address it added to
+    X-Forwarded-For. The rightmost entry is used because everything to its
+    left was sent by the client and can be made up.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def rate_limit(name: str, limit: int, window_seconds: int):
+    """Route dependency: at most `limit` requests per IP per window."""
+    def check(request: Request) -> None:
+        if not limiter.hit((name, _client_ip(request)), limit, window_seconds):
+            raise HTTPException(
+                status_code=429,
+                detail="Too many requests. Please wait a few minutes and try again.",
+            )
+    return Depends(check)
+
+
+# Field names as the forms label them, for validation messages.
+FIELD_LABELS = {
+    "full_name": "Name",
+    "email_address": "Email",
+    "email": "Email",
+    "student_id": "Student ID",
+    "age": "Age",
+    "grade": "Grade",
+    "first_choice": "1st choice",
+    "second_choice": "2nd choice",
+    "third_choice": "3rd choice",
+    "password": "Password",
+    "invite_code": "Admin code",
+}
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(_: Request, exc: RequestValidationError):
+    """Turn pydantic's error list into the one-line `detail` the pages show.
+
+    FastAPI's default is a list of objects, which the frontend would render
+    as "[object Object]".
+    """
+    error = exc.errors()[0]
+    field = error["loc"][-1] if error["loc"] else ""
+    label = FIELD_LABELS.get(field, str(field).replace("_", " ").capitalize())
+    ctx = error.get("ctx") or {}
+    kind = error["type"]
+    if kind == "string_too_long":
+        message = f"{label} must be at most {ctx['max_length']} characters."
+    elif kind in ("string_too_short", "missing"):
+        message = f"{label} is required."
+    elif kind == "value_error" and field in ("email", "email_address"):
+        message = "Enter a valid email address."
+    elif kind == "value_error":
+        # Our own validators word their errors to follow the label.
+        message = f"{label} {error['msg'].removeprefix('Value error, ')}."
+    elif kind == "less_than_equal":
+        message = f"{label} must be {ctx['le']} or under."
+    else:
+        message = f"{label}: {error['msg'].removeprefix('Value error, ')}"
+    return JSONResponse(status_code=422, content={"detail": message})
+
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
+    # bcrypt raises on anything longer, and no stored password can be.
+    if len(password.encode()) > MAX_PASSWORD_BYTES:
+        return False
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
@@ -194,7 +304,8 @@ def _assert_invite_code(code: str) -> None:
         )
     # Stripped so a stray space or newline from copy-pasting the code doesn't
     # turn a correct code into a confusing 401.
-    if not secrets.compare_digest(code.strip(), COORDINATOR_INVITE_CODE):
+    # Compared as bytes: compare_digest rejects non-ASCII str with a TypeError.
+    if not secrets.compare_digest(code.strip().encode(), COORDINATOR_INVITE_CODE.encode()):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="That admin code isn't right.",
@@ -236,25 +347,52 @@ def get_current_coordinator(token: str = Depends(oauth2_scheme)):
 
 # models
 
+# Length limits match the database columns, so an over-long value is a clear
+# 422 rather than a 500 from Postgres.
+def _text(max_length: int):
+    return Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=max_length)
+    ]
+
+
+def _max_chars(limit: int):
+    def check(value: str) -> str:
+        if len(value) > limit:
+            raise ValueError(f"must be at most {limit} characters")
+        return value
+    return AfterValidator(check)
+
+
+def _password_fits(value: str) -> str:
+    if len(value.encode()) > MAX_PASSWORD_BYTES:
+        raise ValueError(f"must be at most {MAX_PASSWORD_BYTES} characters")
+    return value
+
+
+Password = Annotated[str, AfterValidator(_password_fits)]
+
+
 class CoordinatorCreate(BaseModel):
-    full_name: str
-    email: str
-    password: str
-    invite_code: str
+    full_name: _text(100)
+    email: Annotated[EmailStr, _max_chars(200)]
+    password: Password
+    invite_code: Annotated[str, Field(max_length=100)]
 
 class CoordinatorPublic(BaseModel):
     full_name: str
     email: str
 
 class InviteCode(BaseModel):
-    invite_code: str
+    invite_code: Annotated[str, Field(max_length=100)]
 
 class ForgotPassword(BaseModel):
-    email: str
+    # Not EmailStr: the reply is the same for any input, so a malformed
+    # address shouldn't get a different answer.
+    email: Annotated[str, Field(max_length=200)]
 
 class ResetPassword(BaseModel):
-    token: str
-    password: str
+    token: Annotated[str, Field(max_length=100)]
+    password: Password
 
 class Token(BaseModel):
     access_token: str
@@ -270,6 +408,13 @@ PARTICIPANT_TYPES = ("student", "teacher", "community")
 NO_STUDENT_ID = ""
 NO_GRADE = ""
 NO_AGE = 0
+
+GRADES = ("9th", "10th", "11th", "12th")
+
+# Column sizes in sign_ups.
+Name = _text(50)
+SignUpEmail = Annotated[EmailStr, _max_chars(100)]
+Choice = Annotated[str, Field(max_length=50)]
 
 
 class SignUpRow(BaseModel):
@@ -348,16 +493,25 @@ class SlotCapacityRow(BaseModel):
 
 
 class StudentSignUp(BaseModel):
-    full_name: str
-    student_id: str
-    age: int
-    email_address: str
+    full_name: Name
+    student_id: _text(10)
+    # The 16 minimum is checked in the route, for its clearer message; this
+    # bound just keeps nonsense (and integer overflow) out of the column.
+    age: Annotated[int, Field(ge=0, le=25)]
+    email_address: SignUpEmail
     grade: str
-    first_choice: str
-    second_choice: str
-    third_choice: str
+    first_choice: Choice
+    second_choice: Choice
+    third_choice: Choice
     is_student: bool = True
     confirmed: bool = False
+
+    @field_validator("grade")
+    @classmethod
+    def _known_grade(cls, value: str) -> str:
+        if value not in GRADES:
+            raise ValueError("is required")
+        return value
 
 
 class AdultSignUp(BaseModel):
@@ -366,11 +520,11 @@ class AdultSignUp(BaseModel):
     Age is not asked for because the 16-year-old minimum is a school-student
     concern; every adult signing up here clears it by definition.
     """
-    full_name: str
-    email_address: str
-    first_choice: str
-    second_choice: str
-    third_choice: str
+    full_name: Name
+    email_address: SignUpEmail
+    first_choice: Choice
+    second_choice: Choice
+    third_choice: Choice
     participant_type: str
 
     @field_validator("participant_type")
@@ -389,7 +543,7 @@ def read_root():
 
 
 
-@app.post("/login", response_model=Token)
+@app.post("/login", response_model=Token, dependencies=[rate_limit("login", 10, 600)])
 def login(form: OAuth2PasswordRequestForm = Depends()):
     with db_cursor() as cur:
         # Matched case-insensitively, the same way registration checks for an
@@ -424,7 +578,7 @@ def get_me(email: str = Depends(get_current_coordinator)):
     return CoordinatorPublic(full_name=row[0], email=row[1])
 
 
-@app.post("/coordinator/verify-invite")
+@app.post("/coordinator/verify-invite", dependencies=[rate_limit("invite", 10, 600)])
 def verify_invite(body: InviteCode):
     """Check an invite code on its own, so the register page can gate its form.
 
@@ -435,7 +589,11 @@ def verify_invite(body: InviteCode):
     return {"valid": True}
 
 
-@app.post("/coordinator", response_model=CoordinatorPublic)
+@app.post(
+    "/coordinator",
+    response_model=CoordinatorPublic,
+    dependencies=[rate_limit("invite", 10, 600)],
+)
 def create_coordinator(coordinator: CoordinatorCreate):
     _assert_invite_code(coordinator.invite_code)
 
@@ -461,10 +619,17 @@ def create_coordinator(coordinator: CoordinatorCreate):
                 detail="An account already exists for that email.",
             )
 
-        cur.execute(
-            "INSERT INTO coordinators (full_name, email, password_hash) VALUES (%s, %s, %s)",
-            (full_name, email, hashed)
-        )
+        try:
+            cur.execute(
+                "INSERT INTO coordinators (full_name, email, password_hash) VALUES (%s, %s, %s)",
+                (full_name, email, hashed)
+            )
+        except psycopg2.errors.UniqueViolation:
+            # Two registrations for one email racing past the check above.
+            raise HTTPException(
+                status_code=409,
+                detail="An account already exists for that email.",
+            )
     return CoordinatorPublic(full_name=full_name, email=email)
 
 
@@ -485,6 +650,47 @@ def _ensure_password_reset_table() -> None:
                    expires_at TIMESTAMPTZ NOT NULL,
                    used_at    TIMESTAMPTZ
                )"""
+        )
+
+
+def _ensure_unique_constraints() -> None:
+    """Let the database, not just the routes, enforce the one-per-person rules.
+
+    The routes check for duplicates first, for a friendly message, but two
+    requests can both pass that check at once. These indexes make the second
+    insert fail instead, and the routes turn that into the same 409.
+
+    `sign_ups.id` also gets an identity default: it used to be MAX(id) + 1,
+    which hands two simultaneous sign-ups the same id.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """SELECT is_identity FROM information_schema.columns
+               WHERE table_schema = current_schema()
+                 AND table_name = 'sign_ups' AND column_name = 'id'"""
+        )
+        if cur.fetchone()[0] == "NO":
+            cur.execute(
+                "ALTER TABLE sign_ups ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY"
+            )
+            # Start after the existing rows, which were numbered by hand.
+            cur.execute(
+                """SELECT setval(pg_get_serial_sequence('sign_ups', 'id'),
+                                 COALESCE(MAX(id), 0) + 1, false)
+                   FROM sign_ups"""
+            )
+        cur.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS sign_ups_email_key
+               ON sign_ups (LOWER(email_address))"""
+        )
+        # Partial: teachers and community members all store a blank ID.
+        cur.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS sign_ups_student_id_key
+               ON sign_ups (student_id) WHERE student_id <> ''"""
+        )
+        cur.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS coordinators_email_key
+               ON coordinators (LOWER(email))"""
         )
 
 
@@ -561,7 +767,7 @@ def _send_reset_email(to: str, full_name: str, link: str) -> None:
     )
 
 
-@app.post("/forgot-password")
+@app.post("/forgot-password", dependencies=[rate_limit("forgot-password", 5, 600)])
 def forgot_password(body: ForgotPassword, background: BackgroundTasks):
     """Email a reset link, if an account exists for the address.
 
@@ -596,7 +802,7 @@ def forgot_password(body: ForgotPassword, background: BackgroundTasks):
     return {"message": "If an account exists for that email, a reset link is on its way."}
 
 
-@app.post("/reset-password")
+@app.post("/reset-password", dependencies=[rate_limit("reset-password", 10, 600)])
 def reset_password(body: ResetPassword):
     """Set a new password using a link from /forgot-password.
 
@@ -661,6 +867,14 @@ def _insert_sign_up(
     email_address = email_address.strip()
     student_id = student_id.strip()
 
+    # Checked here rather than on the models: this is the schedule, and a
+    # sign-up for a time that doesn't exist can never be confirmed.
+    choices = (first_choice, second_choice, third_choice)
+    if any(choice not in VALID_TIME_SLOTS for choice in choices):
+        raise HTTPException(status_code=400, detail="Choose three times from the schedule.")
+    if len(set(choices)) != len(choices):
+        raise HTTPException(status_code=400, detail="Choose three different times.")
+
     with db_cursor(commit=True) as cur:
         # One sign-up per person: a repeat is nearly always a double submit or
         # someone refilling the form, not a second donor. Email is matched
@@ -686,43 +900,60 @@ def _insert_sign_up(
                     detail="A sign-up already exists for that student ID.",
                 )
 
-        # NOTE: races with concurrent signups. Fix is an identity column on id.
-        cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM sign_ups")
-        new_id = cur.fetchone()[0]
-        cur.execute(
-            """
-            INSERT INTO sign_ups (
-                id, full_name, is_student, participant_type, student_id, age,
-                timestamp, email_address, grade, confirmed, time_slot,
-                first_choice, second_choice, third_choice
+        try:
+            cur.execute(
+                f"""
+                INSERT INTO sign_ups (
+                    full_name, is_student, participant_type, student_id, age,
+                    timestamp, email_address, grade, confirmed, time_slot,
+                    first_choice, second_choice, third_choice
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING {SIGN_UP_COLUMNS}
+                """,
+                (
+                    str.title(full_name), participant_type == "student",
+                    participant_type, student_id, age, datetime.now(timezone.utc),
+                    email_address, grade, False,
+                    # time_slot is seeded with the first choice rather than left
+                    # blank; the row is unconfirmed, so the dashboard ignores it
+                    # until a coordinator assigns one. Kept as-is to match the
+                    # existing rows.
+                    first_choice,
+                    first_choice, second_choice, third_choice,
+                )
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                new_id, str.title(full_name), participant_type == "student",
-                participant_type, student_id, age, datetime.now(timezone.utc),
-                email_address, grade, False,
-                # time_slot is seeded with the first choice rather than left
-                # blank; the row is unconfirmed, so the dashboard ignores it
-                # until a coordinator assigns one. Kept as-is to match the
-                # existing rows.
-                first_choice,
-                first_choice, second_choice, third_choice,
+        except psycopg2.errors.UniqueViolation as err:
+            # Lost a race with an identical sign-up that passed the checks
+            # above at the same moment.
+            constraint = err.diag.constraint_name
+            if constraint in ("sign_ups_email_key", "sign_ups_student_id_key"):
+                what = "student ID" if constraint == "sign_ups_student_id_key" else "email address"
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"A sign-up already exists for that {what}.",
+                )
+            # An id collision: only possible if an older deploy still running
+            # alongside this one numbered a row by hand. The failed insert
+            # advanced the sequence, so trying again gets a fresh id.
+            raise HTTPException(
+                status_code=503,
+                detail="Something went wrong saving your sign-up. Please try again.",
             )
-        )
-        cur.execute(
-            f"SELECT {SIGN_UP_COLUMNS} FROM sign_ups WHERE id = %s", (new_id,)
-        )
         created = _row_to_sign_up(cur.fetchone())
 
     # Lets an open dashboard show the new pending sign-up without a refresh.
-    broker.publish("sign_up.created", created.model_dump())
+    broker.publish("sign_up.created", created.model_dump(mode="json"))
     # The stored row rather than the submitted one, so the response reflects
     # the name and email as actually saved (capitalised, trimmed).
     return created
 
 
 # ── Sign-up confirmation email ─────────────────────────────────────────
+
+# When donors are told their assigned time will arrive. Mirrored by
+# SLOT_NOTICE_DEADLINE in frontend/src/timeSlots.js.
+SLOT_NOTICE_DEADLINE = "10/14 at 8:00 AM"
 
 # Students under this age must bring a signed parent consent form. Mirrors
 # CONSENT_REQUIRED_UNDER in frontend/src/CompletedStudentForm.jsx.
@@ -770,7 +1001,7 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
         )
         + "</ul>"
         "<p>A coordinator will assign you one of these times, and we'll email "
-        "you once it's set.</p>"
+        f"it to you by {SLOT_NOTICE_DEADLINE}.</p>"
     )
     text_body = (
         f"Hi {first_name},\n\n"
@@ -778,7 +1009,7 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
         "These are the times you asked for:\n\n"
         + "".join(f"  {label}: {choice}\n" for label, choice in zip(labels, choices))
         + "\nA coordinator will assign you one of these times, and we'll email "
-        "you once it's set.\n"
+        f"it to you by {SLOT_NOTICE_DEADLINE}.\n"
     )
 
     if needs_consent:
@@ -821,7 +1052,7 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
     )
 
 
-@app.post('/student-sign-up')
+@app.post('/student-sign-up', dependencies=[rate_limit("sign-up", 40, 600)])
 def create_student_sign_up(sign_up: StudentSignUp, background: BackgroundTasks):
     if sign_up.age < MIN_SIGN_UP_AGE:
         raise HTTPException(
@@ -844,7 +1075,7 @@ def create_student_sign_up(sign_up: StudentSignUp, background: BackgroundTasks):
     return created
 
 
-@app.post('/adult-sign-up')
+@app.post('/adult-sign-up', dependencies=[rate_limit("sign-up", 40, 600)])
 def create_adult_sign_up(sign_up: AdultSignUp, background: BackgroundTasks):
     """Register a teacher or community member.
 
@@ -1185,7 +1416,7 @@ def set_slot_capacity(
 
     updated = SlotCapacityRow(time_slot=time_slot, capacity=target, base=base)
     # Keeps other open dashboards' schedules in step, the same way row edits do.
-    broker.publish("capacity.updated", updated.model_dump())
+    broker.publish("capacity.updated", updated.model_dump(mode="json"))
     return updated
 
 
@@ -1226,7 +1457,7 @@ def confirm_sign_up(
 
     # Published outside the block: `db_cursor` commits on exit, so announcing
     # any earlier would advertise a row that could still roll back.
-    broker.publish("sign_up.updated", updated.model_dump())
+    broker.publish("sign_up.updated", updated.model_dump(mode="json"))
     return updated
 
 
@@ -1244,7 +1475,7 @@ def unconfirm_sign_up(sign_up_id: int, _: str = Depends(get_current_coordinator)
             raise HTTPException(status_code=404, detail="Sign-up not found")
         updated = _row_to_sign_up(row)
 
-    broker.publish("sign_up.updated", updated.model_dump())
+    broker.publish("sign_up.updated", updated.model_dump(mode="json"))
     return updated
 
 
@@ -1282,7 +1513,7 @@ def move_sign_up(
             raise HTTPException(status_code=404, detail="Sign-up not found")
         moved = _row_to_sign_up(row)
 
-    broker.publish("sign_up.updated", moved.model_dump())
+    broker.publish("sign_up.updated", moved.model_dump(mode="json"))
     return moved
 
 

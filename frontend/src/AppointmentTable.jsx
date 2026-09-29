@@ -91,132 +91,134 @@ export default function AppointmentTable({
                 <span className="count-badge grey">{openCount} open</span>
             </h3>
 
-            <table className="appointment-table">
-                <thead>
-                    <tr>
-                        <th>Period</th>
-                        <th>App. Time</th>
-                        <th>Full Name</th>
-                        <th>Status</th>
-                        <th>Student ID</th>
-                        <th>Primary Email</th>
-                        <th aria-label="Actions" />
-                    </tr>
-                </thead>
-                <tbody>
-                    {groups.map((group) => {
-                        const periodBg = colorsForPeriod(group.period).bg;
-                        // "Unscheduled" rows aren't real slots, so nothing may drop there.
-                        const droppable = group.period !== "Unscheduled";
-
-                        return group.rows.map((row, index) => {
-                            const booked = row.kind === "booked";
-                            const isDragging = booked && row.signUp.id === draggingId;
-                            const isTarget = droppable && dropSlot === row.key;
-
-                            return (
-                                <tr
-                                    key={booked ? row.signUp.id : `${row.key}#${row.seat}`}
-                                    className={[
-                                        index === 0 ? "period-start" : "",
-                                        booked ? "" : "slot-open",
-                                        isDragging ? "row-dragging" : "",
-                                        isTarget && !blocks(row.key) ? "row-drop" : "",
-                                        isTarget && blocks(row.key) ? "row-drop-blocked" : "",
-                                    ]
-                                        .filter(Boolean)
-                                        .join(" ")}
-                                    draggable={booked}
-                                    onDragStart={
-                                        booked
-                                            ? (e) => handleDragStart(e, row.signUp.id)
-                                            : undefined
-                                    }
-                                    onDragEnd={booked ? handleDragEnd : undefined}
-                                    onDragOver={
-                                        droppable ? (e) => handleDragOver(e, row.key) : undefined
-                                    }
-                                    onDrop={
-                                        droppable ? (e) => handleDrop(e, row.key) : undefined
-                                    }
-                                >
-                                    <td
-                                        className={`period-cell${
-                                            droppable ? " has-capacity-menu" : ""
-                                        }`}
-                                        style={{ backgroundColor: periodBg }}
-                                        onContextMenu={(e) =>
-                                            handlePeriodContextMenu(e, group.period)
-                                        }
-                                        title={
-                                            droppable
-                                                ? "Right-click to add or remove positions"
+            <div className="table-scroll">
+                <table className="appointment-table">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>App. Time</th>
+                            <th>Full Name</th>
+                            <th>Status</th>
+                            <th>Student ID</th>
+                            <th>Primary Email</th>
+                            <th aria-label="Actions" />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {groups.map((group) => {
+                            const periodBg = colorsForPeriod(group.period).bg;
+                            // "Unscheduled" rows aren't real slots, so nothing may drop there.
+                            const droppable = group.period !== "Unscheduled";
+    
+                            return group.rows.map((row, index) => {
+                                const booked = row.kind === "booked";
+                                const isDragging = booked && row.signUp.id === draggingId;
+                                const isTarget = droppable && dropSlot === row.key;
+    
+                                return (
+                                    <tr
+                                        key={booked ? row.signUp.id : `${row.key}#${row.seat}`}
+                                        className={[
+                                            index === 0 ? "period-start" : "",
+                                            booked ? "" : "slot-open",
+                                            isDragging ? "row-dragging" : "",
+                                            isTarget && !blocks(row.key) ? "row-drop" : "",
+                                            isTarget && blocks(row.key) ? "row-drop-blocked" : "",
+                                        ]
+                                            .filter(Boolean)
+                                            .join(" ")}
+                                        draggable={booked}
+                                        onDragStart={
+                                            booked
+                                                ? (e) => handleDragStart(e, row.signUp.id)
                                                 : undefined
                                         }
+                                        onDragEnd={booked ? handleDragEnd : undefined}
+                                        onDragOver={
+                                            droppable ? (e) => handleDragOver(e, row.key) : undefined
+                                        }
+                                        onDrop={
+                                            droppable ? (e) => handleDrop(e, row.key) : undefined
+                                        }
                                     >
-                                        {group.period}
-                                    </td>
-
-                                    <td className="appointment-time">{row.time}</td>
-
-                                    {!booked ? (
-                                        <td colSpan={5} />
-                                    ) : (
-                                        <>
-                                            <td className="drag-name">
-                                                <span className="drag-grip" aria-hidden="true">
-                                                    ⠿
-                                                </span>
-                                                {row.signUp.full_name}
-                                            </td>
-                                            {(() => {
-                                                const person = participantOf(row.signUp);
-                                                // Only students have an ID to
-                                                // show, so for everyone else
-                                                // the status runs across both
-                                                // columns rather than sitting
-                                                // beside an empty cell.
-                                                const hasId = isStudent(row.signUp);
-                                                return (
-                                                    <>
-                                                        <td
-                                                            className="status-cell"
-                                                            colSpan={hasId ? 1 : 2}
-                                                            style={{
-                                                                backgroundColor: person.bg,
-                                                                color: person.text,
-                                                            }}
-                                                        >
-                                                            {person.label}
-                                                        </td>
-                                                        {hasId && (
-                                                            <td>{row.signUp.student_id}</td>
-                                                        )}
-                                                    </>
-                                                );
-                                            })()}
-                                            <td className="appointment-email">
-                                                {row.signUp.email_address}
-                                            </td>
-                                            <td className="appointment-actions">
-                                                <button
-                                                    type="button"
-                                                    className="unconfirm-btn"
-                                                    onClick={() => onUnconfirm(row.signUp.id)}
-                                                    disabled={busyId === row.signUp.id}
-                                                    title="Move back to pending"
-                                                >
-                                                    undo
-                                                </button>
-                                            </td>
-                                        </>
-                                    )}
-                                </tr>
-                            );
-                        });
-                    })}
-                </tbody>
-            </table>
+                                        <td
+                                            className={`period-cell${
+                                                droppable ? " has-capacity-menu" : ""
+                                            }`}
+                                            style={{ backgroundColor: periodBg }}
+                                            onContextMenu={(e) =>
+                                                handlePeriodContextMenu(e, group.period)
+                                            }
+                                            title={
+                                                droppable
+                                                    ? "Right-click to add or remove positions"
+                                                    : undefined
+                                            }
+                                        >
+                                            {group.period}
+                                        </td>
+    
+                                        <td className="appointment-time">{row.time}</td>
+    
+                                        {!booked ? (
+                                            <td colSpan={5} />
+                                        ) : (
+                                            <>
+                                                <td className="drag-name">
+                                                    <span className="drag-grip" aria-hidden="true">
+                                                        ⠿
+                                                    </span>
+                                                    {row.signUp.full_name}
+                                                </td>
+                                                {(() => {
+                                                    const person = participantOf(row.signUp);
+                                                    // Only students have an ID to
+                                                    // show, so for everyone else
+                                                    // the status runs across both
+                                                    // columns rather than sitting
+                                                    // beside an empty cell.
+                                                    const hasId = isStudent(row.signUp);
+                                                    return (
+                                                        <>
+                                                            <td
+                                                                className="status-cell"
+                                                                colSpan={hasId ? 1 : 2}
+                                                                style={{
+                                                                    backgroundColor: person.bg,
+                                                                    color: person.text,
+                                                                }}
+                                                            >
+                                                                {person.label}
+                                                            </td>
+                                                            {hasId && (
+                                                                <td>{row.signUp.student_id}</td>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
+                                                <td className="appointment-email">
+                                                    {row.signUp.email_address}
+                                                </td>
+                                                <td className="appointment-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="unconfirm-btn"
+                                                        onClick={() => onUnconfirm(row.signUp.id)}
+                                                        disabled={busyId === row.signUp.id}
+                                                        title="Move back to pending"
+                                                    >
+                                                        undo
+                                                    </button>
+                                                </td>
+                                            </>
+                                        )}
+                                    </tr>
+                                );
+                            });
+                        })}
+                    </tbody>
+                </table>
+            </div>
 
             {capacityMenu && (
                 <CapacityPicker

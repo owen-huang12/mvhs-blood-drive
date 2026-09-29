@@ -30,6 +30,10 @@ export default function SignUpCta() {
     const wrapRef = useRef(null);
     const panelRef = useRef(null);
     const closeTimer = useRef(null);
+    // Whether the menu was open when the current tap or click began. On a
+    // touch screen, the tap's emulated mouseenter and focus both open the
+    // menu before the click arrives, so the click can't judge by `open`.
+    const wasOpen = useRef(null);
 
     const cancelClose = () => {
         clearTimeout(closeTimer.current);
@@ -121,7 +125,16 @@ export default function SignUpCta() {
             <button
                 type="button"
                 className={`signup-cta${open ? " is-open" : ""}`}
-                onClick={() => (open ? setOpen(false) : openNow())}
+                onPointerDown={() => {
+                    wasOpen.current = open;
+                }}
+                onClick={() => {
+                    // Null for a keyboard press, which has no pointerdown.
+                    const shouldClose = wasOpen.current ?? open;
+                    wasOpen.current = null;
+                    if (shouldClose) setOpen(false);
+                    else openNow();
+                }}
                 aria-haspopup="menu"
                 aria-expanded={open}
             >

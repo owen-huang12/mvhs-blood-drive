@@ -65,74 +65,76 @@ export default function AttendanceClerk() {
                                 </span>
                             </h3>
 
-                            <table className="appointment-table day-of-table">
-                                <thead>
-                                    <tr>
-                                        <th>Period</th>
-                                        <th>App. Time</th>
-                                        <th>Full Name</th>
-                                        <th>Student ID</th>
-                                        <th>Time In Appt.</th>
-                                        <th>Time Out</th>
-                                        <th>Time In Canteen</th>
-                                        <th>Deferred?</th>
-                                        <th>Attendance</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {rows.map((row) => {
-                                        const slot = parseSlot(row.time_slot);
-
-                                        return (
-                                            <tr
-                                                key={row.id}
-                                                className={
-                                                    needsFiling(row) ? "row-needs-filing" : ""
-                                                }
-                                            >
-                                                <td
-                                                    className="period-cell"
-                                                    style={{
-                                                        backgroundColor: colorsForPeriod(
-                                                            slot.period,
-                                                        ).bg,
-                                                    }}
+                            <div className="table-scroll">
+                                <table className="appointment-table day-of-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>App. Time</th>
+                                            <th>Full Name</th>
+                                            <th>Student ID</th>
+                                            <th>Time In Appt.</th>
+                                            <th>Time Out</th>
+                                            <th>Time In Canteen</th>
+                                            <th>Deferred?</th>
+                                            <th>Attendance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rows.map((row) => {
+                                            const slot = parseSlot(row.time_slot);
+    
+                                            return (
+                                                <tr
+                                                    key={row.id}
+                                                    className={
+                                                        needsFiling(row) ? "row-needs-filing" : ""
+                                                    }
                                                 >
-                                                    {slot.period}
-                                                </td>
-                                                <td className="appointment-time">
-                                                    {slot.time}
-                                                </td>
-                                                <td>{row.full_name}</td>
-                                                <td>{row.student_id}</td>
-                                                <td className="stamp-cell">
-                                                    {formatStamp(row.time_in)}
-                                                </td>
-                                                <td className="stamp-cell">
-                                                    {formatStamp(row.time_out)}
-                                                </td>
-                                                <td className="stamp-cell">
-                                                    {visitDuration(row)}
-                                                </td>
-                                                <td className="deferred-cell">
-                                                    {row.deferred ? "Yes" : ""}
-                                                </td>
-                                                <td className="attendance-cell">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={row.attendance_cleared}
-                                                        disabled={busyId === row.id}
-                                                        aria-label={`Attendance filed: ${row.full_name}`}
-                                                        onChange={(e) =>
-                                                            toggle(row, e.target.checked)
-                                                        }
-                                                    />
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                                    <td
+                                                        className="period-cell"
+                                                        style={{
+                                                            backgroundColor: colorsForPeriod(
+                                                                slot.period,
+                                                            ).bg,
+                                                        }}
+                                                    >
+                                                        {slot.period}
+                                                    </td>
+                                                    <td className="appointment-time">
+                                                        {slot.time}
+                                                    </td>
+                                                    <td>{row.full_name}</td>
+                                                    <td>{row.student_id}</td>
+                                                    <td className="stamp-cell">
+                                                        {formatStamp(row.time_in)}
+                                                    </td>
+                                                    <td className="stamp-cell">
+                                                        {formatStamp(row.time_out)}
+                                                    </td>
+                                                    <td className="stamp-cell">
+                                                        {visitDuration(row)}
+                                                    </td>
+                                                    <td className="deferred-cell">
+                                                        {row.deferred ? "Yes" : ""}
+                                                    </td>
+                                                    <td className="attendance-cell">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={row.attendance_cleared}
+                                                            disabled={busyId === row.id}
+                                                            aria-label={`Attendance filed: ${row.full_name}`}
+                                                            onChange={(e) =>
+                                                                toggle(row, e.target.checked)
+                                                            }
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </section>
                     )}
                 </div>

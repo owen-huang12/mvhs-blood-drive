@@ -12,6 +12,16 @@ export function clearToken() {
     localStorage.removeItem(TOKEN_KEY);
 }
 
+/**
+ * The server rejected the token (it expired, or the account is gone): drop it
+ * and send the coordinator to sign in again, rather than leaving every save
+ * on the page failing with a generic error.
+ */
+export function endSession() {
+    clearToken();
+    window.location.assign("/coordinators?expired=1");
+}
+
 export function isTokenValid() {
     const token = getToken();
     if (!token) return false;

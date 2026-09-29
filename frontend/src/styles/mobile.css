@@ -47,12 +47,15 @@
   .login-actions .submit-btn { padding: 13px 32px; }
 
   /* Preferred time-slot table: shrink first; if a period label (e.g.
-     "Period 2/Tutorial") still doesn't fit, scroll inside the table rather
-     than break the page width. */
-  .timeslot-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+     "Period 2/Tutorial") still doesn't fit, it scrolls in its .table-scroll
+     box rather than breaking the page width. */
+  /* Tables can't scroll themselves; each sits in a .table-scroll box, so a
+     table wider than the phone scrolls inside it instead of widening the
+     page. Mobile only: on desktop the box would clip the slot picker. */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .timeslot-table th,
   .timeslot-table td { padding: 9px 12px; font-size: 0.85rem; }
-  .timeslot-period { font-size: 0.68rem; padding: 3px 8px; }
+  .timeslot-period { font-size: 0.74rem; padding: 2px 6px; }
   .timeslot-choice-col { width: 64px; }
 
   /* Coordinator dashboard: the pending-row grid and appointment table are
@@ -65,8 +68,6 @@
 
   .pending-list { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .pending-row { min-width: 720px; }
-
-  .appointment-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
   .slot-panel { width: 240px; max-width: calc(100vw - 32px); }
 }

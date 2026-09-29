@@ -52,6 +52,12 @@ export const PERIOD_COLORS = {
     "Period 6": { bg: "#FFEEE9", text: "#131211" },
 };
 
+/**
+ * When donors are told their assigned time will arrive.
+ * Mirrored by SLOT_NOTICE_DEADLINE in backend/main.py.
+ */
+export const SLOT_NOTICE_DEADLINE = "10/14 at 8:00 AM";
+
 export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
 export const REQUIRED_CHOICES = 3;
 

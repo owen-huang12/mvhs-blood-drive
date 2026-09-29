@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import BloodDriveOverview from "./BloodDriveOverview.jsx";
 import CollapsibleSection from "./CollapsibleSection.jsx";
 import TimeSlotChoices from "./TimeSlotChoices.jsx";
-import { REQUIRED_CHOICES } from "./timeSlots.js";
+import { REQUIRED_CHOICES, SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
 import { signUpAdult } from "./api.js";
 import { ApiError } from "./api.js";
 
@@ -68,7 +68,7 @@ export default function AdultSignUpForm({ participantType }) {
                         <p className="form-prompt">
                             Thanks for signing up for the Stanford Blood Drive.
                             We'll send your assigned donation time slot to{" "}
-                            <strong>{email}</strong> by 8/12 at 2:30 PM.
+                            <strong>{email}</strong> by {SLOT_NOTICE_DEADLINE}.
                         </p>
                         <button
                             type="button"
@@ -105,6 +105,7 @@ export default function AdultSignUpForm({ participantType }) {
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="Please enter your full name"
+                                maxLength={50}
                                 required
                             />
                         </div>
@@ -119,6 +120,7 @@ export default function AdultSignUpForm({ participantType }) {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                                maxLength={100}
                                 required
                             />
                         </div>

@@ -99,18 +99,21 @@ export default function StudentPersonalInfo() {
                             value={name}
                             onChange={setName}
                             placeholder="Please enter your full name"
+                            maxLength={50}
                         />
                         <Field
                             id="studentId"
                             label="Student ID"
                             value={studentId}
                             onChange={setStudentId}
+                            maxLength={10}
                         />
                         <Field
                             id="age"
                             label="Age"
                             type="number"
                             min={MIN_AGE}
+                            max={25}
                             value={age}
                             onChange={setAge}
                         />
@@ -120,6 +123,7 @@ export default function StudentPersonalInfo() {
                             type="email"
                             value={email}
                             onChange={setEmail}
+                            maxLength={100}
                         />
 
                         <div className="form-field">
@@ -135,6 +139,7 @@ export default function StudentPersonalInfo() {
                                             value={g}
                                             checked={grade === g}
                                             onChange={(e) => setGrade(e.target.value)}
+                                            required
                                         />
                                         {g}
                                     </label>

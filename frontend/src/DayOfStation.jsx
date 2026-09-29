@@ -78,124 +78,126 @@ export default function DayOfStation() {
                                 </span>
                             </h3>
 
-                            <table className="appointment-table day-of-table">
-                                <thead>
-                                    <tr>
-                                        <th>Period</th>
-                                        <th>App. Time</th>
-                                        <th>Full Name</th>
-                                        <th>Status</th>
-                                        <th>Time In Appt.</th>
-                                        <th>Time Out</th>
-                                        <th>Time In Canteen</th>
-                                        <th>Deferred?</th>
-                                        <th>Attendance</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {rows.map((row) => {
-                                        const slot = parseSlot(row.time_slot);
-                                        const person = participantOf(row);
-                                        const busy = busyId === row.id;
-
-                                        return (
-                                            <tr
-                                                key={row.id}
-                                                className={
-                                                    row.deferred ? "row-deferred" : ""
-                                                }
-                                            >
-                                                <td
-                                                    className="period-cell"
-                                                    style={{
-                                                        backgroundColor: colorsForPeriod(
-                                                            slot.period,
-                                                        ).bg,
-                                                    }}
+                            <div className="table-scroll">
+                                <table className="appointment-table day-of-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>App. Time</th>
+                                            <th>Full Name</th>
+                                            <th>Status</th>
+                                            <th>Time In Appt.</th>
+                                            <th>Time Out</th>
+                                            <th>Time In Canteen</th>
+                                            <th>Deferred?</th>
+                                            <th>Attendance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rows.map((row) => {
+                                            const slot = parseSlot(row.time_slot);
+                                            const person = participantOf(row);
+                                            const busy = busyId === row.id;
+    
+                                            return (
+                                                <tr
+                                                    key={row.id}
+                                                    className={
+                                                        row.deferred ? "row-deferred" : ""
+                                                    }
                                                 >
-                                                    {slot.period}
-                                                </td>
-                                                <td className="appointment-time">
-                                                    {slot.time}
-                                                </td>
-                                                <td>{row.full_name}</td>
-                                                <td
-                                                    className="status-cell"
-                                                    style={{
-                                                        backgroundColor: person.bg,
-                                                        color: person.text,
-                                                    }}
-                                                >
-                                                    {person.label}
-                                                </td>
-
-                                                {STEPS.map((step) => (
-                                                    <TimeStampCell
-                                                        key={step.field}
-                                                        value={row[step.field]}
-                                                        label={step.label}
-                                                        busy={busy}
-                                                        locked={row.attendance_cleared}
-                                                        onLocked={() => setLockedRow(row)}
-                                                        onStamp={() =>
-                                                            run(row.id, () =>
-                                                                stampDayOf(row.id, step.field),
-                                                            )
-                                                        }
-                                                        onSet={(value) =>
-                                                            run(row.id, () =>
-                                                                stampDayOf(
-                                                                    row.id,
-                                                                    step.field,
-                                                                    value,
-                                                                ),
-                                                            )
-                                                        }
-                                                    />
-                                                ))}
-
-                                                <td className="stamp-cell">
-                                                    {visitDuration(row)}
-                                                </td>
-
-                                                <td className="deferred-cell">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={row.deferred}
-                                                        disabled={busy}
-                                                        aria-label={`Deferred: ${row.full_name}`}
-                                                        onChange={(e) => {
-                                                            if (row.attendance_cleared) {
-                                                                setLockedRow(row);
-                                                                return;
-                                                            }
-                                                            run(row.id, () =>
-                                                                setDeferred(
-                                                                    row.id,
-                                                                    e.target.checked,
-                                                                ),
-                                                            );
+                                                    <td
+                                                        className="period-cell"
+                                                        style={{
+                                                            backgroundColor: colorsForPeriod(
+                                                                slot.period,
+                                                            ).bg,
                                                         }}
-                                                    />
-                                                </td>
-
-                                                {/* The clerk owns this column;
-                                                    the desk only watches it. */}
-                                                <td className="attendance-cell">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={row.attendance_cleared}
-                                                        readOnly
-                                                        className="checkbox-readonly"
-                                                        aria-label={`Attendance filed: ${row.full_name}`}
-                                                        onClick={() => setLockedRow(row)}
-                                                    />
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                                    >
+                                                        {slot.period}
+                                                    </td>
+                                                    <td className="appointment-time">
+                                                        {slot.time}
+                                                    </td>
+                                                    <td>{row.full_name}</td>
+                                                    <td
+                                                        className="status-cell"
+                                                        style={{
+                                                            backgroundColor: person.bg,
+                                                            color: person.text,
+                                                        }}
+                                                    >
+                                                        {person.label}
+                                                    </td>
+    
+                                                    {STEPS.map((step) => (
+                                                        <TimeStampCell
+                                                            key={step.field}
+                                                            value={row[step.field]}
+                                                            label={step.label}
+                                                            busy={busy}
+                                                            locked={row.attendance_cleared}
+                                                            onLocked={() => setLockedRow(row)}
+                                                            onStamp={() =>
+                                                                run(row.id, () =>
+                                                                    stampDayOf(row.id, step.field),
+                                                                )
+                                                            }
+                                                            onSet={(value) =>
+                                                                run(row.id, () =>
+                                                                    stampDayOf(
+                                                                        row.id,
+                                                                        step.field,
+                                                                        value,
+                                                                    ),
+                                                                )
+                                                            }
+                                                        />
+                                                    ))}
+    
+                                                    <td className="stamp-cell">
+                                                        {visitDuration(row)}
+                                                    </td>
+    
+                                                    <td className="deferred-cell">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={row.deferred}
+                                                            disabled={busy}
+                                                            aria-label={`Deferred: ${row.full_name}`}
+                                                            onChange={(e) => {
+                                                                if (row.attendance_cleared) {
+                                                                    setLockedRow(row);
+                                                                    return;
+                                                                }
+                                                                run(row.id, () =>
+                                                                    setDeferred(
+                                                                        row.id,
+                                                                        e.target.checked,
+                                                                    ),
+                                                                );
+                                                            }}
+                                                        />
+                                                    </td>
+    
+                                                    {/* The clerk owns this column;
+                                                        the desk only watches it. */}
+                                                    <td className="attendance-cell">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={row.attendance_cleared}
+                                                            readOnly
+                                                            className="checkbox-readonly"
+                                                            aria-label={`Attendance filed: ${row.full_name}`}
+                                                            onClick={() => setLockedRow(row)}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </section>
                     )}
                 </div>

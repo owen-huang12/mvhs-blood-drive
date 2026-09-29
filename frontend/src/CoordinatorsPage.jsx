@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import icon from "./assets/icon.png";
 import { saveToken } from "./auth.js";
 import { login } from "./api.js";
@@ -10,6 +10,8 @@ export default function CoordinatorsPage() {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    // Set by endSession() when a signed-in page's token stops working.
+    const expired = useSearchParams()[0].get("expired") === "1";
 
     async function handleSubmit(e) {
         e.preventDefault();
@@ -48,6 +50,11 @@ export default function CoordinatorsPage() {
                 </div>
 
                 <h2 className="login-heading">Sign In</h2>
+                {expired && (
+                    <p className="form-prompt">
+                        Your session expired. Sign in again to keep going.
+                    </p>
+                )}
 
                 <form className="login-form" onSubmit={handleSubmit}>
                     <div className="form-field">

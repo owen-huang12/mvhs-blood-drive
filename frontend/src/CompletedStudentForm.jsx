@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, signUpStudent } from "./api.js";
+import { SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
 
 /**
  * Donors under this age have to bring a signed parent consent form.
@@ -117,8 +118,7 @@ export default function CompletedStudentForm() {
                         <p className="form-prompt">
                             Thanks for signing up for the Stanford Blood Drive.
                             We'll send your assigned donation time slot to{" "}
-                            <strong>{signUp.email_address}</strong> by 8/12 at
-                            2:30 PM.
+                            <strong>{signUp.email_address}</strong> by {SLOT_NOTICE_DEADLINE}.
                         </p>
                         {needsConsentForm && <ConsentFormNotice />}
                         <Link to="/" className="submit-btn">
@@ -137,8 +137,7 @@ export default function CompletedStudentForm() {
                 <div className="section-body">
                     <p className="form-prompt">
                         Once you confirm, we'll send your assigned donation time
-                        slot to <strong>{signUp.email_address}</strong> by 8/12
-                        at 2:30 PM.
+                        slot to <strong>{signUp.email_address}</strong> by {SLOT_NOTICE_DEADLINE}.
                     </p>
 
                     {needsConsentForm && (
