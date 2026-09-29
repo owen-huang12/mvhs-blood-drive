@@ -104,7 +104,7 @@
 .password-toggle svg { display: block; width: 17px; height: 17px; }
 
 
-/* ── Parent consent (confirmation page, under-18 donors) ───────────── */
+/* ── Parent consent (confirmation page, 16-year-old donors) ──────── */
 
 .consent-block {
   display: flex;

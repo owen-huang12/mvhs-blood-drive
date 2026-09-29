@@ -238,7 +238,8 @@ def rate_limit(name: str, limit: int, window_seconds: int):
 
 # Field names as the forms label them, for validation messages.
 FIELD_LABELS = {
-    "full_name": "Name",
+    "full_name": "Full legal name",
+    "preferred_name": "Preferred name",
     "email_address": "Email",
     "email": "Email",
     "student_id": "Student ID",
@@ -413,13 +414,18 @@ GRADES = ("9th", "10th", "11th", "12th")
 
 # Column sizes in sign_ups.
 Name = _text(50)
+# Optional: blank is stored as NULL and emails fall back to the first name.
+PreferredName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=50)] | None
 SignUpEmail = Annotated[EmailStr, _max_chars(100)]
 Choice = Annotated[str, Field(max_length=50)]
 
 
 class SignUpRow(BaseModel):
     id: int
+    # Legal name, which is what the dashboards show.
     full_name: str
+    # What to call them in emails. None if they didn't give one.
+    preferred_name: str | None = None
     is_student: bool
     participant_type: str
     student_id: str
@@ -494,6 +500,7 @@ class SlotCapacityRow(BaseModel):
 
 class StudentSignUp(BaseModel):
     full_name: Name
+    preferred_name: PreferredName = None
     student_id: _text(10)
     # The 16 minimum is checked in the route, for its clearer message; this
     # bound just keeps nonsense (and integer overflow) out of the column.
@@ -521,6 +528,7 @@ class AdultSignUp(BaseModel):
     concern; every adult signing up here clears it by definition.
     """
     full_name: Name
+    preferred_name: PreferredName = None
     email_address: SignUpEmail
     first_choice: Choice
     second_choice: Choice
@@ -850,6 +858,7 @@ MIN_SIGN_UP_AGE = 16
 def _insert_sign_up(
     *,
     full_name: str,
+    preferred_name: str | None,
     email_address: str,
     participant_type: str,
     student_id: str,
@@ -904,15 +913,18 @@ def _insert_sign_up(
             cur.execute(
                 f"""
                 INSERT INTO sign_ups (
-                    full_name, is_student, participant_type, student_id, age,
-                    timestamp, email_address, grade, confirmed, time_slot,
-                    first_choice, second_choice, third_choice
+                    full_name, preferred_name, is_student, participant_type,
+                    student_id, age, timestamp, email_address, grade, confirmed,
+                    time_slot, first_choice, second_choice, third_choice
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING {SIGN_UP_COLUMNS}
                 """,
                 (
-                    str.title(full_name), participant_type == "student",
+                    # Preferred name is kept as typed: title-casing would
+                    # mangle names like "DJ" or "McKenzie".
+                    str.title(full_name), preferred_name or None,
+                    participant_type == "student",
                     participant_type, student_id, age, datetime.now(timezone.utc),
                     email_address, grade, False,
                     # time_slot is seeded with the first choice rather than left
@@ -957,7 +969,7 @@ SLOT_NOTICE_DEADLINE = "10/14 at 8:00 AM"
 
 # Students under this age must bring a signed parent consent form. Mirrors
 # CONSENT_REQUIRED_UNDER in frontend/src/CompletedStudentForm.jsx.
-CONSENT_REQUIRED_UNDER_AGE = 18
+CONSENT_REQUIRED_UNDER_AGE = 17
 
 # Stanford Blood Center's consent form, attached to the confirmation email.
 # Copies of the PDFs in frontend/public/: the backend is deployed on its own
@@ -986,7 +998,7 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
         sign_up.participant_type == "student"
         and sign_up.age < CONSENT_REQUIRED_UNDER_AGE
     )
-    first_name = _first_name(sign_up.full_name)
+    first_name = sign_up.preferred_name or _first_name(sign_up.full_name)
     choices = (sign_up.first_choice, sign_up.second_choice, sign_up.third_choice)
     labels = ("1st choice", "2nd choice", "3rd choice")
 
@@ -1062,6 +1074,7 @@ def create_student_sign_up(sign_up: StudentSignUp, background: BackgroundTasks):
 
     created = _insert_sign_up(
         full_name=sign_up.full_name,
+        preferred_name=sign_up.preferred_name,
         email_address=sign_up.email_address,
         participant_type="student",
         student_id=sign_up.student_id,
@@ -1084,6 +1097,7 @@ def create_adult_sign_up(sign_up: AdultSignUp, background: BackgroundTasks):
     """
     created = _insert_sign_up(
         full_name=sign_up.full_name,
+        preferred_name=sign_up.preferred_name,
         email_address=sign_up.email_address,
         participant_type=sign_up.participant_type,
         student_id=NO_STUDENT_ID,
@@ -1101,7 +1115,7 @@ SIGN_UP_COLUMNS = """
     id, full_name, is_student, student_id, age, email_address,
     grade, confirmed, time_slot, first_choice, second_choice, third_choice,
     participant_type, time_in, time_canteen, time_out, deferred,
-    attendance_cleared
+    attendance_cleared, preferred_name
 """
 
 
@@ -1118,6 +1132,7 @@ def _row_to_sign_up(row) -> SignUpRow:
         # Defaulted rather than passed through: the columns are added NOT NULL
         # DEFAULT FALSE, but a row read mid-migration could still be None.
         deferred=bool(row[16]), attendance_cleared=bool(row[17]),
+        preferred_name=row[18],
     )
 
 

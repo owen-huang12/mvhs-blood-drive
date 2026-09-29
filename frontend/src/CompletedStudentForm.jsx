@@ -7,7 +7,7 @@ import { SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
  * Donors under this age have to bring a signed parent consent form.
  * Mirrored by CONSENT_REQUIRED_UNDER_AGE in backend/main.py.
  */
-const CONSENT_REQUIRED_UNDER = 18;
+const CONSENT_REQUIRED_UNDER = 17;
 
 // Stanford Blood Center's form, served from frontend/public/.
 const CONSENT_FORMS = [
@@ -71,7 +71,7 @@ function ConsentFormNotice() {
  * Final step of the student sign-up: review, agree, confirm.
  *
  * The form page navigates here without saving anything — the POST happens on
- * Confirm below, so an under-18 donor has acknowledged the parent consent form
+ * Confirm below, so a 16-year-old donor has acknowledged the parent consent form
  * before a record exists.
  */
 export default function CompletedStudentForm() {

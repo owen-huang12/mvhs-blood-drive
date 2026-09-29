@@ -8,18 +8,18 @@ import { REQUIRED_CHOICES } from "./timeSlots.js";
 const GRADES = ["9th", "10th", "11th", "12th"];
 const MIN_AGE = 16;
 
-/** Labelled required text input — the shape every field on this form takes. */
-function Field({ id, label, value, onChange, ...inputProps }) {
+/** Labelled text input — the shape every field on this form takes. */
+function Field({ id, label, value, onChange, optional = false, ...inputProps }) {
     return (
         <div className="form-field">
             <label htmlFor={id}>
-                {label} <span className="required">*</span>
+                {label} {!optional && <span className="required">*</span>}
             </label>
             <input
                 id={id}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                required
+                required={!optional}
                 {...inputProps}
             />
         </div>
@@ -32,6 +32,7 @@ export default function StudentPersonalInfo() {
     const prior = useLocation().state?.signUp;
 
     const [name, setName] = useState(prior?.full_name ?? "");
+    const [preferredName, setPreferredName] = useState(prior?.preferred_name ?? "");
     const [studentId, setStudentId] = useState(prior?.student_id ?? "");
     const [age, setAge] = useState(prior?.age != null ? String(prior.age) : "");
     const [email, setEmail] = useState(prior?.email_address ?? "");
@@ -63,11 +64,12 @@ export default function StudentPersonalInfo() {
         const [first_choice, second_choice, third_choice] = selectedSlots;
 
         // Nothing is saved yet — the confirm screen posts this once they have
-        // confirmed, and (under 18) acknowledged the parent consent form.
+        // confirmed, and (if 16) acknowledged the parent consent form.
         navigate("/completed", {
             state: {
                 signUp: {
                     full_name: name,
+                    preferred_name: preferredName,
                     student_id: studentId,
                     age: Number(age),
                     email_address: email,
@@ -90,16 +92,24 @@ export default function StudentPersonalInfo() {
                         <p className="form-prompt">
                             Please fill out the form below with your information
                             to register for the blood drive. All fields are
-                            required.
+                            required except preferred name.
                         </p>
 
                         <Field
                             id="name"
-                            label="Full Name"
+                            label="Full Legal Name"
                             value={name}
                             onChange={setName}
-                            placeholder="Please enter your full name"
+                            placeholder="Please enter your full legal name"
                             maxLength={50}
+                        />
+                        <Field
+                            id="preferredName"
+                            label="Preferred Name"
+                            value={preferredName}
+                            onChange={setPreferredName}
+                            maxLength={50}
+                            optional
                         />
                         <Field
                             id="studentId"

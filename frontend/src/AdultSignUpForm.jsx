@@ -11,12 +11,13 @@ import { ApiError } from "./api.js";
  * Sign-up form for teachers and community members.
  *
  * Everything the student form asks for that only applies to school students —
- * student ID, age, grade, and the under-18 parent consent step — is left out.
+ * student ID, age, grade, and the 16-year-old parent consent step — is left out.
  * That leaves a name, an email, and the three time choices, so there is no
  * second screen to review: this form registers directly.
  */
 export default function AdultSignUpForm({ participantType }) {
     const [name, setName] = useState("");
+    const [preferredName, setPreferredName] = useState("");
     const [email, setEmail] = useState("");
     const [selectedSlots, setSelectedSlots] = useState([]);
     const [error, setError] = useState("");
@@ -41,6 +42,7 @@ export default function AdultSignUpForm({ participantType }) {
         try {
             await signUpAdult({
                 full_name: name,
+                preferred_name: preferredName,
                 email_address: email,
                 participant_type: participantType,
                 first_choice,
@@ -93,20 +95,30 @@ export default function AdultSignUpForm({ participantType }) {
                         <p className="form-prompt">
                             Please fill out the form below with your information
                             to register for the blood drive. All fields are
-                            required.
+                            required except preferred name.
                         </p>
 
                         <div className="form-field">
                             <label htmlFor="name">
-                                Full Name <span className="required">*</span>
+                                Full Legal Name <span className="required">*</span>
                             </label>
                             <input
                                 id="name"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
-                                placeholder="Please enter your full name"
+                                placeholder="Please enter your full legal name"
                                 maxLength={50}
                                 required
+                            />
+                        </div>
+
+                        <div className="form-field">
+                            <label htmlFor="preferredName">Preferred Name</label>
+                            <input
+                                id="preferredName"
+                                value={preferredName}
+                                onChange={(e) => setPreferredName(e.target.value)}
+                                maxLength={50}
                             />
                         </div>
 
