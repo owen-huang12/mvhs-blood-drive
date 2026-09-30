@@ -14,8 +14,12 @@ import {
  * it, and clicks past REQUIRED_CHOICES are ignored rather than replacing an
  * earlier pick — silently dropping someone's 1st choice would be worse than
  * making them deselect first.
+ *
+ * `adult` (teachers and community members) includes the adults-only slots.
  */
-export default function TimeSlotChoices({ selected, onChange }) {
+export default function TimeSlotChoices({ adult = false, selected, onChange }) {
+    const slots = adult ? TIME_SLOTS : TIME_SLOTS.filter((slot) => !slot.adultsOnly);
+
     const toggle = (slotKey) => {
         if (selected.includes(slotKey)) {
             onChange(selected.filter((k) => k !== slotKey));
@@ -43,7 +47,7 @@ export default function TimeSlotChoices({ selected, onChange }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {TIME_SLOTS.map((slot) => {
+                        {slots.map((slot) => {
                             const slotKey = formatSlot(slot);
                             const rank = selected.indexOf(slotKey);
                             const isSelected = rank !== -1;

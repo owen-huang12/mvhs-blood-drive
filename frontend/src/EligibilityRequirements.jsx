@@ -8,12 +8,11 @@ const ELIGIBILITY_URL =
 const SHARED_REQUIREMENTS = [
     "Be free of cold and flu symptoms (allergies and most medications are fine)",
     "Eat before donating and drink plenty of fluids",
-    "Bring a photo ID",
-    "Fill out a medical history questionnaire and go over your answers privately with a Stanford Blood Center medical historian",
+    "Bring a physical photo ID",
 ];
 
 const STUDENT_REQUIREMENTS = [
-    "Be at least 17 years old, or 16 with a signed parent or guardian consent form",
+    "Be at least 17 years old, or 16 with a signed parent or guardian consent form (see below)",
     ...SHARED_REQUIREMENTS,
 ];
 

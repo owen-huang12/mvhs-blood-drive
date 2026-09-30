@@ -7,6 +7,7 @@ import AgreementFields from "./AgreementFields.jsx";
 import ContactNote from "./ContactNote.jsx";
 import HowHearField from "./HowHearField.jsx";
 import { SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
+import { useScrollToTop } from "./scrollToTop.js";
 
 /**
  * Donors under this age have to bring a signed parent consent form.
@@ -53,6 +54,7 @@ export default function CompletedStudentForm() {
     const [registered, setRegistered] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
+    useScrollToTop(registered);
 
     // Reached without going through the form (direct URL, cleared history):
     // there is nothing to confirm, so send them back to sign up.

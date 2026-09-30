@@ -4,9 +4,14 @@
  * Slots are stored in the database as "<period> - <time>" (e.g.
  * "Period 2 - 8:30 AM"), which is what `formatSlot` produces and
  * `parseSlot` reads back.
+ *
+ * `adultsOnly` slots are for teachers and community members: the student form
+ * leaves them out, but the coordinator dashboard shows them like any other.
+ * Mirrored by ADULT_ONLY_TIME_SLOTS in backend/main.py.
  */
 
 export const TIME_SLOTS = [
+    { period: "Before school", time: "8:15 AM", adultsOnly: true },
     { period: "Period 2", time: "8:30 AM" },
     { period: "Period 2", time: "8:45 AM" },
     { period: "Period 2", time: "9:00 AM" },
@@ -39,8 +44,13 @@ export const TIME_SLOTS = [
  * never read as the same signal.
  *
  * Every pairing below clears WCAG AA (4.5:1) for body text.
+ *
+ * Mirrored by PERIOD_COLORS in backend/main.py, for the confirmation email.
  */
 export const PERIOD_COLORS = {
+    // Cool grey: set apart from the warm off-white table headers (#faf9f8)
+    // and the "Unscheduled" fallback (#ECECEC).
+    "Before school": { bg: "#CFD3D8", text: "#131211" },
     "Period 2": { bg: "#B8D8D8", text: "#131211" },
     "Period 2/Tutorial": { bg: "#c7dbdd", text: "#131211" },
     "Tutorial": { bg: "#EEF5DB", text: "#131211" },
@@ -65,14 +75,16 @@ export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
 export const REQUIRED_CHOICES = 3;
 
 /**
- * Positions available per slot. Alternates 6, 4, 6, 4... from 8:30 AM, so
- * every half hour seats ten. Mirrored by BASE_SLOT_CAPACITY in backend/main.py.
+ * Positions available per slot. 8:15 AM (adults only) seats six, then it
+ * alternates 6, 4, 6, 4... from 8:30 AM, so every half hour from there seats
+ * ten. Mirrored by BASE_SLOT_CAPACITY in backend/main.py.
  *
  * Coordinators can add positions on top of these but never remove below them,
  * so this doubles as the floor the "−" control stops at. Live capacity comes
  * from the server (`GET /slot-capacity`); this is the fallback until it loads.
  */
 export const BASE_CAPACITY = {
+    "Before school - 8:15 AM": 6,
     "Period 2 - 8:30 AM": 6,
     "Period 2 - 8:45 AM": 4,
     "Period 2 - 9:00 AM": 6,
@@ -211,11 +223,12 @@ export const isSlotFull = (signUps, slotKey, capacity) =>
 
 /**
  * Earliest slot on the schedule that still has room — the fallback when
- * every one of a person's three choices is already full.
+ * every one of a person's three choices is already full. Skips adults-only
+ * slots, so the fallback is one a student could be given too.
  */
 export function firstOpenSlot(signUps, capacity) {
     const slot = TIME_SLOTS.find(
-        (s) => !isSlotFull(signUps, formatSlot(s), capacity)
+        (s) => !s.adultsOnly && !isSlotFull(signUps, formatSlot(s), capacity)
     );
     return slot ? formatSlot(slot) : "";
 }

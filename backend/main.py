@@ -936,6 +936,13 @@ def _insert_sign_up(
     choices = (first_choice, second_choice, third_choice)
     if any(choice not in VALID_TIME_SLOTS for choice in choices):
         raise HTTPException(status_code=400, detail="Choose three times from the schedule.")
+    if participant_type == "student" and any(
+        choice in ADULT_ONLY_TIME_SLOTS for choice in choices
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="That time is for teachers and community members only.",
+        )
     if len(set(choices)) != len(choices):
         raise HTTPException(status_code=400, detail="Choose three different times.")
 
@@ -1039,6 +1046,31 @@ CONSENT_FORM_FILES = (
 )
 
 
+# Each period's color, as on the dashboard. Mirrors PERIOD_COLORS in
+# frontend/src/timeSlots.js; keep the two in step.
+PERIOD_COLORS = {
+    "Before school": "#CFD3D8",
+    "Period 2": "#B8D8D8",
+    "Period 2/Tutorial": "#C7DBDD",
+    "Tutorial": "#EEF5DB",
+    "Brunch/Period 4": "#DEDDF8",
+    "Period 4": "#EFE4F1",
+    "Period 4/Lunch": "#EDD3E2",
+    "Lunch": "#DDEAD9",
+    "Lunch/Period 6": "#FFFBE9",
+    "Period 6": "#FFEEE9",
+}
+
+
+def _slot_highlight(slot: str) -> str:
+    """The slot's period color half-way to white: the dashboard's time-column
+    shade. Mixed here since email clients don't support CSS color-mix()."""
+    period = slot.split(" - ", 1)[0]
+    base = PERIOD_COLORS.get(period, "#ECECEC").lstrip("#")
+    channels = (int(base[i : i + 2], 16) for i in (0, 2, 4))
+    return "#" + "".join(f"{(c + 255) // 2:02X}" for c in channels)
+
+
 def _consent_form_attachments() -> list[dict]:
     return [
         {
@@ -1065,12 +1097,13 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
         "These are the times you asked for:</p>"
         "<ul>"
         + "".join(
-            f"<li>{label}: {html.escape(choice)}</li>"
+            f'<li><span style="background-color:{_slot_highlight(choice)}">'
+            f"<strong>{label}:</strong> {html.escape(choice)}</span></li>"
             for label, choice in zip(labels, choices)
         )
         + "</ul>"
-        "<p>A coordinator will assign you one of these times, and we'll email "
-        f"it to you by {SLOT_NOTICE_DEADLINE}.</p>"
+        "<p>A coordinator will assign you one of these times, and "
+        f"<strong>we'll email it to you by {SLOT_NOTICE_DEADLINE}</strong>.</p>"
     )
     text_body = (
         f"Hi {first_name},\n\n"
@@ -1083,7 +1116,8 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
 
     if needs_consent:
         html_body += (
-            "<p><strong>You must bring a signed parent consent form to your "
+            '<p><strong style="background-color:#fcefb4">You must bring a '
+            "signed parent consent form to your "
             "appointment, or you won't be allowed to donate.</strong> The form "
             "is attached in English and Spanish.</p>"
             "<ol>"
@@ -1092,7 +1126,9 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
             "<li>Fill out and sign Section 2 yourself.</li>"
             "<li>Bring the signed paper form with you to your appointment.</li>"
             "</ol>"
-            "<p>Both signatures must be in blue or black ballpoint pen. "
+            "<p>Both signatures "
+            '<strong style="background-color:#fcefb4">must be in blue or black '
+            "ballpoint pen.</strong> "
             "Pencil, marker, other ink colors and correction fluid aren't "
             "accepted, and a form filled out that way won't count.</p>"
         )
@@ -1256,14 +1292,15 @@ def list_sign_ups(_: str = Depends(get_current_coordinator)):
     return [_row_to_sign_up(row) for row in rows]
 
 
-# Positions available per slot. Alternates 6, 4, 6, 4... from 8:30 AM, so
-# every half hour seats ten. Mirrored by BASE_CAPACITY in
-# frontend/src/timeSlots.js.
+# Positions available per slot. 8:15 AM (teachers and community members only)
+# seats six, then it alternates 6, 4, 6, 4... from 8:30 AM, so every half hour
+# from there seats ten. Mirrored by BASE_CAPACITY in frontend/src/timeSlots.js.
 #
 # Coordinators may add positions on top of these, but never remove below them:
 # this is the floor the drive was planned around, so it is the lower bound
 # enforced by /slot-capacity.
 BASE_SLOT_CAPACITY = {
+    "Before school - 8:15 AM": 6,
     "Period 2 - 8:30 AM": 6,
     "Period 2 - 8:45 AM": 4,
     "Period 2 - 9:00 AM": 6,
@@ -1299,6 +1336,11 @@ MAX_SLOT_CAPACITY = 20
 # Canonical schedule, and the allow-list for coordinator reassignment. Derived
 # from the capacity table above so the two can never drift apart.
 VALID_TIME_SLOTS = frozenset(BASE_SLOT_CAPACITY)
+
+# Slots students can't request: teachers and community members only. Still on
+# the schedule, so coordinators see and assign them like any other. Mirrored
+# by `adultsOnly` in frontend/src/timeSlots.js.
+ADULT_ONLY_TIME_SLOTS = frozenset({"Before school - 8:15 AM"})
 
 
 def _ensure_slot_capacity_table() -> None:

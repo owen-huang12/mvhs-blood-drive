@@ -94,6 +94,7 @@ function PendingRow({
             )}
 
             <SlotPicker
+                student={hasStudentFields}
                 choices={choices}
                 value={slot}
                 onChange={setPicked}

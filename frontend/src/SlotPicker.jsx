@@ -37,7 +37,13 @@ export function SlotPill({ value, full, selected, onPick }) {
     );
 }
 
+/**
+ * Assigns a pending sign-up's slot: their three choices, then every other
+ * time. `student` leaves the adults-only slots out of "Assign any time";
+ * coordinators can still drag a student into one on the schedule.
+ */
 export default function SlotPicker({
+    student = false,
     choices,
     value,
     onChange,
@@ -134,7 +140,9 @@ export default function SlotPicker({
 
                     <p className="slot-panel-heading">Assign any time</p>
                     <div className="slot-panel-all">
-                        {TIME_SLOTS.map((slot) => {
+                        {TIME_SLOTS.filter(
+                            (slot) => !(student && slot.adultsOnly)
+                        ).map((slot) => {
                             const key = formatSlot(slot);
                             return (
                                 <SlotPill

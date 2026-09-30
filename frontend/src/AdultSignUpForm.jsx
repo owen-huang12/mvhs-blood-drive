@@ -11,6 +11,7 @@ import { signUpAdult } from "./api.js";
 import { ApiError } from "./api.js";
 import ContactNote from "./ContactNote.jsx";
 import { useFullNameCheck } from "./fullName.js";
+import { useScrollToTop } from "./scrollToTop.js";
 
 /**
  * Sign-up form for teachers and community members.
@@ -33,6 +34,7 @@ export default function AdultSignUpForm({ participantType }) {
     const [registered, setRegistered] = useState(false);
     const navigate = useNavigate();
     const nameRef = useFullNameCheck(name);
+    useScrollToTop(registered);
 
     const handleSubmit = async (event) => {
         event.preventDefault();
@@ -157,6 +159,7 @@ export default function AdultSignUpForm({ participantType }) {
 
                     <CollapsibleSection as="div" title="Preferred time slot">
                         <TimeSlotChoices
+                            adult
                             selected={selectedSlots}
                             onChange={setSelectedSlots}
                         />

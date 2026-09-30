@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from "react-router-dom";
 
 import "./index.css";
 import Header from "./Header.jsx";
@@ -16,9 +16,14 @@ import RequireAuth from "./RequireAuth.jsx";
 import RequirePhaseTwo from "./RequirePhaseTwo.jsx";
 import DayOfStation from "./DayOfStation.jsx";
 import AttendanceClerk from "./AttendanceClerk.jsx";
+import { useScrollToTop } from "./scrollToTop.js";
 
-/** Public pages share the site header; coordinator pages render their own. */
+/**
+ * Public pages share the site header; coordinator pages render their own.
+ * Each new page opens at the top.
+ */
 function PublicLayout() {
+    useScrollToTop(useLocation().pathname);
     return (
         <>
             <Header to="/" />
