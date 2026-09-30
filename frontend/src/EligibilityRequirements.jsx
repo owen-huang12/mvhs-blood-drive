@@ -5,12 +5,24 @@ import ExternalLinkIcon from "./ExternalLinkIcon.jsx";
 const ELIGIBILITY_URL =
     "https://stanfordbloodcenter.org/donate-blood/am-i-eligible-to-donate-blood/";
 
-const GENERAL_REQUIREMENTS = [
-    "Be at least 17 years old, or 16 with a signed parent or guardian consent form",
+const SHARED_REQUIREMENTS = [
     "Be free of cold and flu symptoms (allergies and most medications are fine)",
     "Eat before donating and drink plenty of fluids",
     "Bring a photo ID",
-    "Complete a medical history questionnaire with Stanford Blood Center staff",
+    "Fill out a medical history questionnaire and go over your answers privately with a Stanford Blood Center medical historian",
+];
+
+const STUDENT_REQUIREMENTS = [
+    "Be at least 17 years old, or 16 with a signed parent or guardian consent form",
+    ...SHARED_REQUIREMENTS,
+];
+
+// Teachers and community members: SBC's rules for donors 19 and older. The
+// age and consent rules and the 18-and-under weight chart don't apply; the
+// adult weight rule is a flat minimum instead.
+const ADULT_REQUIREMENTS = [
+    "Weigh at least 110 pounds",
+    ...SHARED_REQUIREMENTS,
 ];
 
 /** Opens Stanford Blood Center's full eligibility page in a new tab. */
@@ -28,8 +40,16 @@ export function EligibilityLink() {
     );
 }
 
-/** Who can donate, from Stanford Blood Center's own requirements. */
-export default function EligibilityRequirements() {
+/**
+ * Who can donate, from Stanford Blood Center's own requirements, ending in
+ * the required "I am eligible" checkbox.
+ *
+ * `adult` swaps the student-specific rules (consent form, the weight chart
+ * for donors 18 and younger) for the adult ones.
+ */
+export default function EligibilityRequirements({ adult = false, eligible, onEligibleChange }) {
+    const requirements = adult ? ADULT_REQUIREMENTS : STUDENT_REQUIREMENTS;
+
     return (
         <div className="eligibility">
             <p className="form-prompt">
@@ -37,19 +57,31 @@ export default function EligibilityRequirements() {
                 requirements. To donate, you must:
             </p>
             <ul className="eligibility-list">
-                {GENERAL_REQUIREMENTS.map((item) => (
+                {requirements.map((item) => (
                     <li key={item}>{item}</li>
                 ))}
             </ul>
 
-            <p className="form-prompt">
-                <strong>
-                    Donors 18 and younger also need to meet a minimum weight
-                    for their height (see Additional Eligibility Requirements).
-                </strong>
-            </p>
+            {!adult && (
+                <p className="form-prompt">
+                    <strong>
+                        Donors 18 and younger also need to meet a minimum weight
+                        for their height (see Additional Eligibility Requirements).
+                    </strong>
+                </p>
+            )}
 
             <EligibilityLink />
+
+            <label className="consent-check eligibility-check">
+                <input
+                    type="checkbox"
+                    checked={eligible}
+                    onChange={(e) => onEligibleChange(e.target.checked)}
+                    required
+                />
+                I am eligible for the blood drive.
+            </label>
         </div>
     );
 }

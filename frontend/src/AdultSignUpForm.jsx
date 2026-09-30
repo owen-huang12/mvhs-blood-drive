@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import AgreementFields from "./AgreementFields.jsx";
 import BloodDriveOverview from "./BloodDriveOverview.jsx";
 import CollapsibleSection from "./CollapsibleSection.jsx";
+import EligibilityRequirements from "./EligibilityRequirements.jsx";
+import HowHearField from "./HowHearField.jsx";
 import TimeSlotChoices from "./TimeSlotChoices.jsx";
 import { REQUIRED_CHOICES, SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
 import { signUpAdult } from "./api.js";
@@ -13,15 +16,18 @@ import { useFullNameCheck } from "./fullName.js";
  * Sign-up form for teachers and community members.
  *
  * Everything the student form asks for that only applies to school students —
- * student ID, age, grade, and the 16-year-old parent consent step — is left out.
- * That leaves a name, an email, and the three time choices, so there is no
- * second screen to review: this form registers directly.
+ * student ID, age, grade, the 16-year-old parent consent step, and missing
+ * class — is left out. The rest (how they heard, eligibility, the agreement)
+ * fits on this one page, so there is no second screen: it registers directly.
  */
 export default function AdultSignUpForm({ participantType }) {
     const [name, setName] = useState("");
     const [preferredName, setPreferredName] = useState("");
     const [email, setEmail] = useState("");
     const [selectedSlots, setSelectedSlots] = useState([]);
+    const [howHear, setHowHear] = useState("");
+    const [eligible, setEligible] = useState(false);
+    const [signature, setSignature] = useState("");
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [registered, setRegistered] = useState(false);
@@ -51,6 +57,8 @@ export default function AdultSignUpForm({ participantType }) {
                 first_choice,
                 second_choice,
                 third_choice,
+                how_hear: howHear,
+                agreement_signature: signature,
             });
             setRegistered(true);
         } catch (err) {
@@ -143,12 +151,29 @@ export default function AdultSignUpForm({ participantType }) {
                                 required
                             />
                         </div>
+
+                        <HowHearField value={howHear} onChange={setHowHear} />
                     </CollapsibleSection>
 
                     <CollapsibleSection as="div" title="Preferred time slot">
                         <TimeSlotChoices
                             selected={selectedSlots}
                             onChange={setSelectedSlots}
+                        />
+                    </CollapsibleSection>
+
+                    <CollapsibleSection as="div" title="Eligibility requirements">
+                        <EligibilityRequirements
+                            adult
+                            eligible={eligible}
+                            onEligibleChange={setEligible}
+                        />
+                    </CollapsibleSection>
+
+                    <CollapsibleSection as="div" title="Agreement">
+                        <AgreementFields
+                            signature={signature}
+                            onSignatureChange={setSignature}
                         />
                     </CollapsibleSection>
 

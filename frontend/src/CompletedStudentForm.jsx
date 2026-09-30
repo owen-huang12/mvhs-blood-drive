@@ -3,9 +3,9 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, signUpStudent } from "./api.js";
 import EligibilityRequirements from "./EligibilityRequirements.jsx";
 import ConsentFormLinks from "./ConsentFormLinks.jsx";
+import AgreementFields from "./AgreementFields.jsx";
 import ContactNote from "./ContactNote.jsx";
-import { CONTACT_EMAIL } from "./contact.js";
-import { useFullNameCheck } from "./fullName.js";
+import HowHearField from "./HowHearField.jsx";
 import { SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
 
 /**
@@ -13,16 +13,6 @@ import { SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
  * Mirrored by CONSENT_REQUIRED_UNDER_AGE in backend/main.py.
  */
 const CONSENT_REQUIRED_UNDER = 17;
-
-/** "How did you hear about the drive?" Mirrored by HOW_HEAR_OPTIONS in backend/main.py. */
-const HOW_HEAR_OPTIONS = [
-    "Friends and family",
-    "Mountain View advertisement",
-    "Teacher or class announcement",
-    "School email or newsletter",
-    "Social media",
-    "Other",
-];
 
 /**
  * What an under-age donor has to do with the consent form, and the links to it.
@@ -60,7 +50,6 @@ export default function CompletedStudentForm() {
     const [eligible, setEligible] = useState(false);
     const [howHear, setHowHear] = useState(signUp?.how_hear ?? "");
     const [signature, setSignature] = useState(signUp?.agreement_signature ?? "");
-    const signatureRef = useFullNameCheck(signature);
     const [registered, setRegistered] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
@@ -128,44 +117,17 @@ export default function CompletedStudentForm() {
                             by {SLOT_NOTICE_DEADLINE}.
                         </p>
 
-                        <div className="form-field">
-                            <label htmlFor="howHear">
-                                How did you hear about the blood drive?{" "}
-                                <span className="required">*</span>
-                            </label>
-                            <select
-                                id="howHear"
-                                value={howHear}
-                                onChange={(e) => setHowHear(e.target.value)}
-                                required
-                            >
-                                <option value="" disabled>
-                                    Choose one
-                                </option>
-                                {HOW_HEAR_OPTIONS.map((option) => (
-                                    <option key={option} value={option}>
-                                        {option}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                        <HowHearField value={howHear} onChange={setHowHear} />
                     </div>
                 </section>
 
                 <section className="form-section">
                     <h2 className="section-title">Eligibility requirements</h2>
                     <div className="section-body">
-                        <EligibilityRequirements />
-
-                        <label className="consent-check eligibility-check">
-                            <input
-                                type="checkbox"
-                                checked={eligible}
-                                onChange={(e) => setEligible(e.target.checked)}
-                                required
-                            />
-                            I am eligible for the blood drive.
-                        </label>
+                        <EligibilityRequirements
+                            eligible={eligible}
+                            onEligibleChange={setEligible}
+                        />
                     </div>
                 </section>
 
@@ -196,42 +158,11 @@ export default function CompletedStudentForm() {
                 <section className="form-section">
                     <h2 className="section-title">Agreement</h2>
                     <div className="section-body">
-                        <p className="form-prompt">
-                            You are responsible for telling your teacher that
-                            you'll be out of class for your donation
-                            appointment.{" "}
-                            <strong>
-                                Your appointment confirmation email is your
-                                official permission slip to be excused from
-                                class.
-                            </strong>
-                        </p>
-                        <p className="form-prompt agreement-intro">
-                            By signing your name, you agree to:
-                        </p>
-                        <ul className="eligibility-list">
-                            <li>Arrive at your appointment on time.</li>
-                            <li>
-                                Tell us if you can't make your appointment or
-                                need to reschedule, by emailing{" "}
-                                <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
-                            </li>
-                        </ul>
-                        <div className="form-field">
-                            <label htmlFor="signature">
-                                Sign your first and last name{" "}
-                                <span className="required">*</span>
-                            </label>
-                            <input
-                                ref={signatureRef}
-                                id="signature"
-                                value={signature}
-                                onChange={(e) => setSignature(e.target.value)}
-                                maxLength={50}
-                                autoComplete="off"
-                                required
-                            />
-                        </div>
+                        <AgreementFields
+                            student
+                            signature={signature}
+                            onSignatureChange={setSignature}
+                        />
 
                         {error && <p className="login-error">{error}</p>}
 

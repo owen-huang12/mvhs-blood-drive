@@ -3,6 +3,7 @@ import ConsentFormLinks from "./ConsentFormLinks.jsx";
 import { EligibilityLink } from "./EligibilityRequirements.jsx";
 import HomeHero from "./HomeHero.jsx";
 import SignUpCta from "./SignUpCta.jsx";
+import { CONTACT_EMAIL } from "./contact.js";
 
 export default function HomePage() {
     return (
@@ -35,6 +36,14 @@ export default function HomePage() {
                     <ConsentFormLinks />
                 </div>
             </CollapsibleSection>
+
+            <aside className="home-contact">
+                <p>
+                    Questions about the blood drive, or need to change or cancel
+                    your appointment? Email us at{" "}
+                    <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+                </p>
+            </aside>
 
             {/* Opens into the three participant routes on hover. */}
             <SignUpCta />

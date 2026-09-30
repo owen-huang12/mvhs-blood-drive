@@ -21,7 +21,7 @@
   .home-page { padding: 0 20px 88px; height: calc(100vh - 76px); }
   .home-page .section-title { margin-left: -20px; margin-right: -20px; padding: 12px 20px; }
 
-  .home-hero { height: calc((100vh - 76px - 84px) * 0.75); }
+  .home-hero { height: calc((100vh - 76px - 84px) * 0.75); margin-left: -20px; margin-right: -20px; }
 
   /* `bottom` sits on the wrapper, which is the positioned element. */
   .signup-cta-wrap { bottom: 20px; }

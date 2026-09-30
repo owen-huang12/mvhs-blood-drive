@@ -147,11 +147,13 @@
 }
 
 /* Home hero */
+/* Pulled out to the screen edges with negative margins that cancel the page's
+   side padding, the same way .home-page .section-title does. (A 100vw box
+   shifted with left/transform also looked right, but still counted as extra
+   width, so the page could be scrolled sideways.) */
 .home-hero {
-  width: 100vw;
-  position: relative;
-  left: 50%;
-  transform: translateX(-50%);
+  margin-left: -48px;
+  margin-right: -48px;
   /* Three quarters of the space under the header, so the sections below show
      without scrolling. Still full width: object-fit: cover crops the photo's
      top and bottom rather than leaving gaps at the sides. */
@@ -199,3 +201,24 @@
 @media (max-width: 640px) {
   .home-links { flex-direction: column; }
 }
+
+/* Contact box at the foot of the home page. An aside rather than a section,
+   so it doesn't join the sections' snap points; it snaps by its bottom edge
+   instead, which keeps the very end of the page reachable. */
+/* The gap above the contact box matches the one between the buttons in the
+   row above it (--space-md), so that section's bottom padding comes down to
+   that and the box adds none of its own. */
+.home-page > section:last-of-type .collapsible-inner { padding-bottom: var(--space-md); }
+
+.home-contact {
+  margin-top: 0;
+  padding: var(--space-lg);
+  background: #fff;
+  border: 1px solid #cfc9c4;
+  scroll-snap-align: end;
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #333;
+}
+
+.home-contact a { color: var(--coral); }

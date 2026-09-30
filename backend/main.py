@@ -421,13 +421,14 @@ NO_AGE = 0
 GRADES = ("9th", "10th", "11th", "12th")
 
 # "How did you hear about the drive?" Mirrored by HOW_HEAR_OPTIONS in
-# frontend/src/CompletedStudentForm.jsx.
+# frontend/src/HowHearField.jsx.
 HOW_HEAR_OPTIONS = (
     "Friends and family",
     "Mountain View advertisement",
     "Teacher or class announcement",
     "School email or newsletter",
     "Social media",
+    "Participated in a previous blood drive",
     "Other",
 )
 
@@ -437,6 +438,14 @@ def _full_name(value: str) -> str:
         raise ValueError("must include your first and last name")
     return value
 
+
+def _check_how_hear(value: str) -> str:
+    if value not in HOW_HEAR_OPTIONS:
+        raise ValueError("is required")
+    return value
+
+
+HowHear = Annotated[str, AfterValidator(_check_how_hear)]
 
 # Column sizes in sign_ups. Donor names and signatures must be a full name:
 # first and last, at least.
@@ -453,7 +462,7 @@ class SignUpRow(BaseModel):
     full_name: str
     # What to call them in emails. None if they didn't give one.
     preferred_name: str | None = None
-    # Student-only answers; None for everyone else.
+    # From the end of the sign-up; None on rows from before they were asked.
     how_hear: str | None = None
     agreement_signature: str | None = None
     is_student: bool
@@ -540,7 +549,7 @@ class StudentSignUp(BaseModel):
     first_choice: Choice
     second_choice: Choice
     third_choice: Choice
-    how_hear: str
+    how_hear: HowHear
     agreement_signature: Name
     is_student: bool = True
     confirmed: bool = False
@@ -549,13 +558,6 @@ class StudentSignUp(BaseModel):
     @classmethod
     def _known_grade(cls, value: str) -> str:
         if value not in GRADES:
-            raise ValueError("is required")
-        return value
-
-    @field_validator("how_hear")
-    @classmethod
-    def _known_source(cls, value: str) -> str:
-        if value not in HOW_HEAR_OPTIONS:
             raise ValueError("is required")
         return value
 
@@ -573,6 +575,8 @@ class AdultSignUp(BaseModel):
     second_choice: Choice
     third_choice: Choice
     participant_type: str
+    how_hear: HowHear
+    agreement_signature: Name
 
     @field_validator("participant_type")
     @classmethod
@@ -1171,6 +1175,8 @@ def create_adult_sign_up(sign_up: AdultSignUp, background: BackgroundTasks):
         first_choice=sign_up.first_choice,
         second_choice=sign_up.second_choice,
         third_choice=sign_up.third_choice,
+        how_hear=sign_up.how_hear,
+        agreement_signature=sign_up.agreement_signature,
     )
     background.add_task(_send_sign_up_email, created)
     return created
@@ -1370,11 +1376,10 @@ def _ensure_day_of_columns() -> None:
 
 
 def _ensure_student_agreement_columns() -> None:
-    """Add the signature from the student confirm page.
+    """Add the signature from the end of the sign-up forms.
 
-    Nullable: teachers and community members aren't asked, and rows from
-    before it existed have none. (`how_hear`, the other answer on that page,
-    was added to the database by hand.)
+    Nullable: rows from before it existed have none. (`how_hear`, the other
+    answer there, was added to the database by hand.)
     """
     with db_cursor(commit=True) as cur:
         # The name they typed to agree to show up on time, tell their teacher,
