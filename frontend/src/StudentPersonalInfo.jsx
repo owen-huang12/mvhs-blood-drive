@@ -3,19 +3,26 @@ import { useLocation, useNavigate } from "react-router-dom";
 import BloodDriveOverview from "./BloodDriveOverview.jsx";
 import CollapsibleSection from "./CollapsibleSection.jsx";
 import TimeSlotChoices from "./TimeSlotChoices.jsx";
+import { useFullNameCheck } from "./fullName.js";
 import { REQUIRED_CHOICES } from "./timeSlots.js";
 
 const GRADES = ["9th", "10th", "11th", "12th"];
 const MIN_AGE = 16;
 
 /** Labelled text input — the shape every field on this form takes. */
-function Field({ id, label, value, onChange, optional = false, ...inputProps }) {
+function Field({ id, label, value, onChange, optional = false, inputRef, ...inputProps }) {
     return (
         <div className="form-field">
             <label htmlFor={id}>
-                {label} {!optional && <span className="required">*</span>}
+                {label}{" "}
+                {optional ? (
+                    <span className="optional">(optional)</span>
+                ) : (
+                    <span className="required">*</span>
+                )}
             </label>
             <input
+                ref={inputRef}
                 id={id}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
@@ -44,6 +51,7 @@ export default function StudentPersonalInfo() {
     );
     const [error, setError] = useState("");
     const navigate = useNavigate();
+    const nameRef = useFullNameCheck(name);
 
     const handleSubmit = (event) => {
         event.preventDefault();
@@ -77,6 +85,10 @@ export default function StudentPersonalInfo() {
                     first_choice,
                     second_choice,
                     third_choice,
+                    // Answered on the confirm screen; carried through so
+                    // "Go back and edit" doesn't wipe them.
+                    how_hear: prior?.how_hear,
+                    agreement_signature: prior?.agreement_signature,
                 },
             },
         });
@@ -98,6 +110,7 @@ export default function StudentPersonalInfo() {
                         <Field
                             id="name"
                             label="Full Legal Name"
+                            inputRef={nameRef}
                             value={name}
                             onChange={setName}
                             placeholder="Please enter your full legal name"

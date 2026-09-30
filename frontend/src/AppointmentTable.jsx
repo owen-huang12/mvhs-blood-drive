@@ -1,5 +1,6 @@
 import { useState } from "react";
 import CapacityPicker from "./CapacityPicker.jsx";
+import PreferredSlotMenu from "./PreferredSlotMenu.jsx";
 import { isStudent, participantOf } from "./participants.js";
 import {
     buildSchedule,
@@ -23,6 +24,8 @@ export default function AppointmentTable({
     const [dropSlot, setDropSlot] = useState(null);
     // The period whose capacity panel is open, plus where to anchor it.
     const [capacityMenu, setCapacityMenu] = useState(null);
+    // The booked row whose preferred-slot menu is open, plus the click point.
+    const [preferredMenu, setPreferredMenu] = useState(null);
 
     const groups = buildSchedule(signUps, capacity);
     const openCount = countOpenSlots(signUps, capacity);
@@ -40,7 +43,17 @@ export default function AppointmentTable({
         // period, so it has no positions to add or remove.
         if (period === "Unscheduled") return;
         event.preventDefault();
+        setPreferredMenu(null);
         setCapacityMenu({ period, x: event.clientX, y: event.clientY });
+    };
+
+    /** Right-clicking a booked person opens their three preferred slots. */
+    const handleRowContextMenu = (event, signUp) => {
+        // The period cell has its own menu (capacity), handled above.
+        if (event.target.closest?.(".period-cell")) return;
+        event.preventDefault();
+        setCapacityMenu(null);
+        setPreferredMenu({ signUp, x: event.clientX, y: event.clientY });
     };
 
     const handleDragStart = (event, id) => {
@@ -107,17 +120,28 @@ export default function AppointmentTable({
                     <tbody>
                         {groups.map((group) => {
                             const periodBg = colorsForPeriod(group.period).bg;
+                            // The time column is the period's color, half-way
+                            // to white, so each slot reads as part of its period.
+                            const timeBg = `color-mix(in srgb, ${periodBg} 50%, #fff)`;
                             // "Unscheduled" rows aren't real slots, so nothing may drop there.
                             const droppable = group.period !== "Unscheduled";
     
                             return group.rows.map((row, index) => {
                                 const booked = row.kind === "booked";
+                                // One period cell per time slot, spanning all
+                                // of that slot's rows; later rows leave it out.
+                                const startsSlot =
+                                    index === 0 || group.rows[index - 1].key !== row.key;
+                                let slotRows = 1;
+                                while (group.rows[index + slotRows]?.key === row.key) {
+                                    slotRows += 1;
+                                }
                                 const isDragging = booked && row.signUp.id === draggingId;
                                 const isTarget = droppable && dropSlot === row.key;
     
                                 return (
                                     <tr
-                                        key={booked ? row.signUp.id : `${row.key}#${row.seat}`}
+                                        key={booked ? row.signUp.id : `${row.key}#open`}
                                         className={[
                                             index === 0 ? "period-start" : "",
                                             booked ? "" : "slot-open",
@@ -140,25 +164,48 @@ export default function AppointmentTable({
                                         onDrop={
                                             droppable ? (e) => handleDrop(e, row.key) : undefined
                                         }
+                                        onContextMenu={
+                                            booked
+                                                ? (e) => handleRowContextMenu(e, row.signUp)
+                                                : undefined
+                                        }
+                                        title={
+                                            booked
+                                                ? "Right-click to switch to a preferred slot"
+                                                : undefined
+                                        }
                                     >
-                                        <td
-                                            className={`period-cell${
-                                                droppable ? " has-capacity-menu" : ""
-                                            }`}
-                                            style={{ backgroundColor: periodBg }}
-                                            onContextMenu={(e) =>
-                                                handlePeriodContextMenu(e, group.period)
-                                            }
-                                            title={
-                                                droppable
-                                                    ? "Right-click to add or remove positions"
-                                                    : undefined
-                                            }
-                                        >
-                                            {group.period}
-                                        </td>
+                                        {startsSlot && (
+                                            <td
+                                                className={`period-cell${
+                                                    droppable ? " has-capacity-menu" : ""
+                                                }`}
+                                                rowSpan={slotRows}
+                                                style={{ backgroundColor: periodBg }}
+                                                onContextMenu={(e) =>
+                                                    handlePeriodContextMenu(e, group.period)
+                                                }
+                                                title={
+                                                    droppable
+                                                        ? "Right-click to add or remove positions"
+                                                        : undefined
+                                                }
+                                            >
+                                                {group.period}
+                                            </td>
+                                        )}
     
-                                        <td className="appointment-time">{row.time}</td>
+                                        <td
+                                            className="appointment-time"
+                                            style={{ backgroundColor: timeBg }}
+                                        >
+                                            {row.time}
+                                            {!booked && (
+                                                <span className="open-count">
+                                                    (x{row.open})
+                                                </span>
+                                            )}
+                                        </td>
     
                                         {!booked ? (
                                             <td colSpan={5} />
@@ -219,6 +266,16 @@ export default function AppointmentTable({
                     </tbody>
                 </table>
             </div>
+
+            {preferredMenu && (
+                <PreferredSlotMenu
+                    signUp={preferredMenu.signUp}
+                    anchor={{ x: preferredMenu.x, y: preferredMenu.y }}
+                    isFull={(slotKey) => isSlotFull(signUps, slotKey, capacity)}
+                    onPick={onMove}
+                    onClose={() => setPreferredMenu(null)}
+                />
+            )}
 
             {capacityMenu && (
                 <CapacityPicker

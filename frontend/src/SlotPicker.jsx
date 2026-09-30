@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { animate } from "animejs";
 import {
+    SHORT_CHOICE_LABELS,
     TIME_SLOTS,
     colorsForPeriod,
     formatSlot,
     parseSlot,
 } from "./timeSlots.js";
-
-const CHOICE_LABELS = ["1st", "2nd", "3rd"];
 
 const displaySlot = (value) => {
     const { period, time } = parseSlot(value);
@@ -15,7 +14,7 @@ const displaySlot = (value) => {
 };
 
 /** A slot pill. Full slots render shaded and inert — no hover, no click. */
-function SlotPill({ value, full, selected, onPick }) {
+export function SlotPill({ value, full, selected, onPick }) {
     const colors = colorsForPeriod(parseSlot(value).period);
 
     return (
@@ -112,7 +111,7 @@ export default function SlotPicker({
                                 key={`${choice}-${index}`}
                             >
                                 <span className="slot-choice-label">
-                                    {CHOICE_LABELS[index]}:
+                                    {SHORT_CHOICE_LABELS[index]}:
                                 </span>
                                 <SlotPill
                                     value={choice}

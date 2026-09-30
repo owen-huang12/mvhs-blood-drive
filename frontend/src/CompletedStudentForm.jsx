@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, signUpStudent } from "./api.js";
+import EligibilityRequirements from "./EligibilityRequirements.jsx";
+import ConsentFormLinks from "./ConsentFormLinks.jsx";
+import ContactNote from "./ContactNote.jsx";
+import { CONTACT_EMAIL } from "./contact.js";
+import { useFullNameCheck } from "./fullName.js";
 import { SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
 
 /**
@@ -9,29 +14,15 @@ import { SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
  */
 const CONSENT_REQUIRED_UNDER = 17;
 
-// Stanford Blood Center's form, served from frontend/public/.
-const CONSENT_FORMS = [
-    { label: "Consent form (English)", href: "/05-FX1-Consent-for-Minor-to-Donate-Blood-Eng.pdf" },
-    { label: "Formulario de consentimiento (Español)", href: "/05-FX1S-Consent-for-Minor-to-Donate-Blood-Sp.pdf" },
+/** "How did you hear about the drive?" Mirrored by HOW_HEAR_OPTIONS in backend/main.py. */
+const HOW_HEAR_OPTIONS = [
+    "Friends and family",
+    "Mountain View advertisement",
+    "Teacher or class announcement",
+    "School email or newsletter",
+    "Social media",
+    "Other",
 ];
-
-/** Box with an arrow out of it: the PDF opens in a new tab. */
-const ExternalLinkIcon = (
-    <svg
-        className="external-link-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-    >
-        <path d="M14 4h6v6" />
-        <path d="M20 4 10 14" />
-        <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-    </svg>
-);
 
 /**
  * What an under-age donor has to do with the consent form, and the links to it.
@@ -49,20 +40,7 @@ function ConsentFormNotice() {
                 signatures must be in blue or black ballpoint pen.{" "}
                 <strong>You won't be allowed to donate without it.</strong>
             </p>
-            <div className="consent-form-links">
-                {CONSENT_FORMS.map(({ label, href }) => (
-                    <a
-                        key={href}
-                        className="consent-form-link"
-                        href={href}
-                        target="_blank"
-                        rel="noreferrer"
-                    >
-                        {label}
-                        {ExternalLinkIcon}
-                    </a>
-                ))}
-            </div>
+            <ConsentFormLinks />
         </>
     );
 }
@@ -79,6 +57,10 @@ export default function CompletedStudentForm() {
     const navigate = useNavigate();
 
     const [agreed, setAgreed] = useState(false);
+    const [eligible, setEligible] = useState(false);
+    const [howHear, setHowHear] = useState(signUp?.how_hear ?? "");
+    const [signature, setSignature] = useState(signUp?.agreement_signature ?? "");
+    const signatureRef = useFullNameCheck(signature);
     const [registered, setRegistered] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
@@ -90,13 +72,14 @@ export default function CompletedStudentForm() {
     }
 
     const needsConsentForm = signUp.age < CONSENT_REQUIRED_UNDER;
-    const canConfirm = !submitting && (!needsConsentForm || agreed);
+    const answers = { how_hear: howHear, agreement_signature: signature };
 
-    async function handleConfirm() {
+    async function handleConfirm(e) {
+        e.preventDefault();
         setError("");
         setSubmitting(true);
         try {
-            await signUpStudent(signUp);
+            await signUpStudent({ ...signUp, ...answers });
             setRegistered(true);
         } catch (err) {
             setError(
@@ -121,6 +104,7 @@ export default function CompletedStudentForm() {
                             <strong>{signUp.email_address}</strong> by {SLOT_NOTICE_DEADLINE}.
                         </p>
                         {needsConsentForm && <ConsentFormNotice />}
+                        <ContactNote />
                         <Link to="/" className="submit-btn">
                             Back to home
                         </Link>
@@ -130,62 +114,150 @@ export default function CompletedStudentForm() {
         );
     }
 
+    // One form across the three sections, so the browser's own required-field
+    // checks cover the dropdown, the signature and the consent checkbox.
     return (
         <main className="page">
-            <section>
-                <h1 className="section-title">Confirm your registration</h1>
-                <div className="section-body">
-                    <p className="form-prompt">
-                        Once you confirm, we'll send your assigned donation time
-                        slot to <strong>{signUp.email_address}</strong> by {SLOT_NOTICE_DEADLINE}.
-                    </p>
+            <form onSubmit={handleConfirm}>
+                <section>
+                    <h1 className="section-title">Confirm your registration</h1>
+                    <div className="section-body">
+                        <p className="form-prompt">
+                            Once you confirm, we'll send your assigned donation
+                            time slot to <strong>{signUp.email_address}</strong>{" "}
+                            by {SLOT_NOTICE_DEADLINE}.
+                        </p>
 
-                    {needsConsentForm && (
-                        <div className="consent-block">
-                            <ConsentFormNotice />
-
-                            <label className="consent-check">
-                                <input
-                                    type="checkbox"
-                                    checked={agreed}
-                                    onChange={(e) => setAgreed(e.target.checked)}
-                                />
-                                I understand that I must bring the consent form,
-                                signed by my parent or guardian and by me, to my
-                                appointment, and that I will not be allowed to
-                                donate without it.
+                        <div className="form-field">
+                            <label htmlFor="howHear">
+                                How did you hear about the blood drive?{" "}
+                                <span className="required">*</span>
                             </label>
+                            <select
+                                id="howHear"
+                                value={howHear}
+                                onChange={(e) => setHowHear(e.target.value)}
+                                required
+                            >
+                                <option value="" disabled>
+                                    Choose one
+                                </option>
+                                {HOW_HEAR_OPTIONS.map((option) => (
+                                    <option key={option} value={option}>
+                                        {option}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
-                    )}
-
-                    {error && <p className="login-error">{error}</p>}
-
-                    <div className="confirm-actions">
-                        <button
-                            type="button"
-                            className="submit-btn"
-                            onClick={handleConfirm}
-                            disabled={!canConfirm}
-                            title={
-                                needsConsentForm && !agreed
-                                    ? "Please agree to the parent consent form first"
-                                    : undefined
-                            }
-                        >
-                            {submitting ? "Confirming…" : "Confirm"}
-                        </button>
-                        <button
-                            type="button"
-                            className="login-link-btn"
-                            onClick={() =>
-                                navigate("/signup/student", { state: { signUp } })
-                            }
-                        >
-                            Go back and edit
-                        </button>
                     </div>
-                </div>
-            </section>
+                </section>
+
+                <section className="form-section">
+                    <h2 className="section-title">Eligibility requirements</h2>
+                    <div className="section-body">
+                        <EligibilityRequirements />
+
+                        <label className="consent-check eligibility-check">
+                            <input
+                                type="checkbox"
+                                checked={eligible}
+                                onChange={(e) => setEligible(e.target.checked)}
+                                required
+                            />
+                            I am eligible for the blood drive.
+                        </label>
+                    </div>
+                </section>
+
+                {needsConsentForm && (
+                    <section className="form-section">
+                        <h2 className="section-title">Consent form</h2>
+                        <div className="section-body">
+                            <div className="consent-block">
+                                <ConsentFormNotice />
+
+                                <label className="consent-check">
+                                    <input
+                                        type="checkbox"
+                                        checked={agreed}
+                                        onChange={(e) => setAgreed(e.target.checked)}
+                                        required
+                                    />
+                                    I understand that I must bring the consent
+                                    form, signed by my parent or guardian and by
+                                    me, to my appointment, and that I will not be
+                                    allowed to donate without it.
+                                </label>
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                <section className="form-section">
+                    <h2 className="section-title">Agreement</h2>
+                    <div className="section-body">
+                        <p className="form-prompt">
+                            You are responsible for telling your teacher that
+                            you'll be out of class for your donation
+                            appointment.{" "}
+                            <strong>
+                                Your appointment confirmation email is your
+                                official permission slip to be excused from
+                                class.
+                            </strong>
+                        </p>
+                        <p className="form-prompt agreement-intro">
+                            By signing your name, you agree to:
+                        </p>
+                        <ul className="eligibility-list">
+                            <li>Arrive at your appointment on time.</li>
+                            <li>
+                                Tell us if you can't make your appointment or
+                                need to reschedule, by emailing{" "}
+                                <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+                            </li>
+                        </ul>
+                        <div className="form-field">
+                            <label htmlFor="signature">
+                                Sign your first and last name{" "}
+                                <span className="required">*</span>
+                            </label>
+                            <input
+                                ref={signatureRef}
+                                id="signature"
+                                value={signature}
+                                onChange={(e) => setSignature(e.target.value)}
+                                maxLength={50}
+                                autoComplete="off"
+                                required
+                            />
+                        </div>
+
+                        {error && <p className="login-error">{error}</p>}
+
+                        <div className="confirm-actions">
+                            <button
+                                type="submit"
+                                className="submit-btn"
+                                disabled={submitting}
+                            >
+                                {submitting ? "Confirming…" : "Confirm"}
+                            </button>
+                            <button
+                                type="button"
+                                className="login-link-btn"
+                                onClick={() =>
+                                    navigate("/signup/student", {
+                                        state: { signUp: { ...signUp, ...answers } },
+                                    })
+                                }
+                            >
+                                Go back and edit
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </form>
         </main>
     );
 }

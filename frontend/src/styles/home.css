@@ -1,18 +1,3 @@
-.photo-stack {
-  display: flex;
-  gap: var(--space-md);
-  margin-top: var(--space-lg);
-}
-
-.photo-placeholder {
-  display: block;
-  flex: 1;
-  width: 100%;
-  height: 260px;
-  object-fit: cover;
-  border-radius: 8px;
-}
-
 /* The wrapper owns the fixed position now, so the pill and the panel that
    opens above it move as one unit and share a hover region. */
 .signup-cta-wrap {
@@ -137,7 +122,9 @@
 /* Home page — full width, not capped like the form pages */
 .home-page {
   max-width: none;
-  padding: 0 48px 80px;
+  /* Bottom room for the fixed sign-up pill (40px up, ~66px tall) plus a
+     small gap, so the last section never scrolls up under it. */
+  padding: 0 48px 112px;
   background-color: var(--alabaster);
   height: calc(100vh - 88px);
   overflow-y: auto;
@@ -165,7 +152,10 @@
   position: relative;
   left: 50%;
   transform: translateX(-50%);
-  height: calc(100vh - 88px - 90px);
+  /* Three quarters of the space under the header, so the sections below show
+     without scrolling. Still full width: object-fit: cover crops the photo's
+     top and bottom rather than leaving gaps at the sides. */
+  height: calc((100vh - 88px - 90px) * 0.75);
   overflow: hidden;
   scroll-snap-align: start;
 }
@@ -175,5 +165,37 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* Crop from the sky rather than the sign at the bottom of the photo. */
+  object-position: center 75%;
   opacity: 0;
+}
+
+/* Link buttons under a home section's text: the eligibility button and the
+   two consent forms, one row of equal buttons. The consent forms' own
+   wrapper steps aside (display: contents) so all three are siblings in the
+   row, and the row stretches them to the height of the tallest. */
+.home-links {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.home-links .consent-form-links { display: contents; }
+
+/* Both selectors are spelled out so they outrank the confirm page's larger
+   consent tiles (.consent-form-links .consent-form-link in form.css). */
+.home-links > .consent-form-link,
+.home-links .consent-form-links .consent-form-link {
+  flex: 1 1 0;
+  justify-content: center;
+  text-align: center;
+  min-height: 0;
+  padding: 12px 16px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+/* Too narrow for three across on a phone: stack them instead. */
+@media (max-width: 640px) {
+  .home-links { flex-direction: column; }
 }

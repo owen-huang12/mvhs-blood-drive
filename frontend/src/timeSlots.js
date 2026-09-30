@@ -58,6 +58,9 @@ export const PERIOD_COLORS = {
  */
 export const SLOT_NOTICE_DEADLINE = "10/14 at 8:00 AM";
 
+/** For the tight pickers, where "1st choice" won't fit beside a slot. */
+export const SHORT_CHOICE_LABELS = ["1st", "2nd", "3rd"];
+
 export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
 export const REQUIRED_CHOICES = 3;
 
@@ -138,8 +141,8 @@ export const slotOrder = (value) => SLOT_ORDER.get(value) ?? Number.MAX_SAFE_INT
  * Build the full appointment schedule: every slot on the spreadsheet, in
  * order, grouped by period for a rowspan-per-period table.
  *
- * A slot with nobody confirmed yields one `open` row so coordinators can see
- * the free positions; a slot with people yields one `booked` row each.
+ * Each slot yields one `booked` row per person confirmed into it, then a
+ * single `open` row carrying how many positions are left (`open`), if any.
  * Confirmed sign-ups whose slot isn't on the spreadsheet are collected into a
  * trailing "Unscheduled" group rather than silently dropped.
  */
@@ -171,9 +174,10 @@ export function buildSchedule(signUps, capacity) {
             key,
             signUp,
         }));
-        for (let i = booked.length; i < capacityFor(key, capacity); i += 1) {
-            rows.push({ kind: "open", time: slot.time, key, seat: i });
-        }
+        // The slot's unfilled positions collapse into one row that carries the
+        // count, so an empty slot reads "(x6)" instead of six blank rows.
+        const open = capacityFor(key, capacity) - booked.length;
+        if (open > 0) rows.push({ kind: "open", time: slot.time, key, open });
 
         pushRows(slot.period, rows);
     }

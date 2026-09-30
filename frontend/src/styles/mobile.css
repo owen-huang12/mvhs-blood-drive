@@ -18,19 +18,16 @@
   }
   .page .section-title { margin-left: -16px; margin-right: -16px; padding: 10px 16px; }
 
-  .home-page { padding: 0 20px 64px; height: calc(100vh - 76px); }
+  .home-page { padding: 0 20px 88px; height: calc(100vh - 76px); }
   .home-page .section-title { margin-left: -20px; margin-right: -20px; padding: 12px 20px; }
 
-  .home-hero { height: calc(100vh - 76px - 84px); }
+  .home-hero { height: calc((100vh - 76px - 84px) * 0.75); }
 
   /* `bottom` sits on the wrapper, which is the positioned element. */
   .signup-cta-wrap { bottom: 20px; }
   .signup-cta { padding: 8px 16px 8px 8px; font-size: 0.9rem; }
   .cta-arrow { width: 36px; height: 36px; font-size: 1.1rem; }
   .signup-cta-option { font-size: 0.9rem; padding: 9px 16px; }
-
-  .photo-stack { flex-direction: column; }
-  .photo-placeholder { height: 180px; }
 
   /* Auth cards (sign in, coordinator register). The brand block and heading
      are tightened up to buy back vertical room, since the register form runs

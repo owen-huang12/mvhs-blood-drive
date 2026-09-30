@@ -43,6 +43,8 @@
   color: #6b6b6b;
   border-right: 1px solid #eceae8;
   white-space: nowrap;
+  /* Spans every row of its time slot; the label stays at the top. */
+  vertical-align: top;
 }
 
 .appointment-time { color: #5f5a56; white-space: nowrap; }
@@ -76,13 +78,17 @@
 
 /* Unfilled spreadsheet slots — visible but recessive, so booked rows lead.
    The dot grid alone reads as "empty" at a glance. */
-.appointment-table tr.slot-open td:not(.period-cell) {
+/* The time cell is left out: it's painted solid in its period's color. */
+.appointment-table tr.slot-open td:not(.period-cell):not(.appointment-time) {
   background-color: #fcfbfa;
   background-image: radial-gradient(circle, #c9c3bd 1px, transparent 1px);
   background-size: 9px 9px;
 }
 
 .appointment-table tr.slot-open .appointment-time { color: #9a938d; }
+
+/* How many positions are still open in the slot, beside its time. */
+.open-count { margin-left: var(--space-sm); }
 
 /* ── Drag and drop (appointment slotting) ──────────────────────────── */
 

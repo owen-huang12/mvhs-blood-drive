@@ -50,6 +50,11 @@ RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 EMAIL_FROM = os.environ.get(
     "EMAIL_FROM", "MVHS Blood Drive <noreply@mvhsblooddrive.com>"
 )
+# The drive's shared inbox. Every email names it at the bottom and sets it as
+# the reply-to, since Resend only sends: without it, a reply would go to the
+# noreply address and bounce. Mirrored by CONTACT_EMAIL in
+# frontend/src/contact.js.
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "mvhsblooddrive@gmail.com")
 # Where the reset link in the email points. Defaults to the live site even when
 # running locally: the email goes to a real inbox, and the database is shared,
 # so the link works there. Set FRONTEND_URL=http://localhost:5173 to test the
@@ -152,6 +157,7 @@ async def lifespan(_: FastAPI):
     _ensure_slot_capacity_table()
     _ensure_participant_type_column()
     _ensure_day_of_columns()
+    _ensure_student_agreement_columns()
     _ensure_password_reset_table()
     _ensure_unique_constraints()
     yield
@@ -240,6 +246,8 @@ def rate_limit(name: str, limit: int, window_seconds: int):
 FIELD_LABELS = {
     "full_name": "Full legal name",
     "preferred_name": "Preferred name",
+    "how_hear": "How you heard about the drive",
+    "agreement_signature": "Signature",
     "email_address": "Email",
     "email": "Email",
     "student_id": "Student ID",
@@ -412,8 +420,27 @@ NO_AGE = 0
 
 GRADES = ("9th", "10th", "11th", "12th")
 
-# Column sizes in sign_ups.
-Name = _text(50)
+# "How did you hear about the drive?" Mirrored by HOW_HEAR_OPTIONS in
+# frontend/src/CompletedStudentForm.jsx.
+HOW_HEAR_OPTIONS = (
+    "Friends and family",
+    "Mountain View advertisement",
+    "Teacher or class announcement",
+    "School email or newsletter",
+    "Social media",
+    "Other",
+)
+
+def _full_name(value: str) -> str:
+    # Wording matches the form's own message (frontend/src/fullName.js).
+    if len(value.split()) < 2:
+        raise ValueError("must include your first and last name")
+    return value
+
+
+# Column sizes in sign_ups. Donor names and signatures must be a full name:
+# first and last, at least.
+Name = Annotated[_text(50), AfterValidator(_full_name)]
 # Optional: blank is stored as NULL and emails fall back to the first name.
 PreferredName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=50)] | None
 SignUpEmail = Annotated[EmailStr, _max_chars(100)]
@@ -426,6 +453,9 @@ class SignUpRow(BaseModel):
     full_name: str
     # What to call them in emails. None if they didn't give one.
     preferred_name: str | None = None
+    # Student-only answers; None for everyone else.
+    how_hear: str | None = None
+    agreement_signature: str | None = None
     is_student: bool
     participant_type: str
     student_id: str
@@ -510,6 +540,8 @@ class StudentSignUp(BaseModel):
     first_choice: Choice
     second_choice: Choice
     third_choice: Choice
+    how_hear: str
+    agreement_signature: Name
     is_student: bool = True
     confirmed: bool = False
 
@@ -517,6 +549,13 @@ class StudentSignUp(BaseModel):
     @classmethod
     def _known_grade(cls, value: str) -> str:
         if value not in GRADES:
+            raise ValueError("is required")
+        return value
+
+    @field_validator("how_hear")
+    @classmethod
+    def _known_source(cls, value: str) -> str:
+        if value not in HOW_HEAR_OPTIONS:
             raise ValueError("is required")
         return value
 
@@ -717,9 +756,17 @@ def _send_email(
 ) -> None:
     """Send one email through Resend. Runs as a background task.
 
-    Failures are logged, not raised: by the time this runs the response has
-    already gone out, so there is no one to report them to.
+    Every email ends with how to reach the drive, added here so no email can
+    leave it out. Failures are logged, not raised: by the time this runs the
+    response has already gone out, so there is no one to report them to.
     """
+    html_body += (
+        '<p style="color:#6b6b6b;font-size:13px">Questions? Email '
+        f'<a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a> '
+        "or reply to this email.</p>"
+    )
+    text_body += f"\nQuestions? Email {CONTACT_EMAIL} or reply to this email.\n"
+
     if not RESEND_API_KEY:
         if os.environ.get("APP_ENV") == "production":
             logger.error("RESEND_API_KEY is not set; no email sent to %s.", to)
@@ -738,6 +785,8 @@ def _send_email(
     }
     if attachments:
         params["attachments"] = attachments
+    if CONTACT_EMAIL:
+        params["reply_to"] = CONTACT_EMAIL
     try:
         resend.api_key = RESEND_API_KEY
         resend.Emails.send(params)
@@ -867,6 +916,8 @@ def _insert_sign_up(
     first_choice: str,
     second_choice: str,
     third_choice: str,
+    how_hear: str | None = None,
+    agreement_signature: str | None = None,
 ) -> SignUpRow:
     """Store one sign-up of any participant type, rejecting duplicates.
 
@@ -915,9 +966,10 @@ def _insert_sign_up(
                 INSERT INTO sign_ups (
                     full_name, preferred_name, is_student, participant_type,
                     student_id, age, timestamp, email_address, grade, confirmed,
-                    time_slot, first_choice, second_choice, third_choice
+                    time_slot, first_choice, second_choice, third_choice,
+                    how_hear, agreement_signature
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING {SIGN_UP_COLUMNS}
                 """,
                 (
@@ -933,6 +985,7 @@ def _insert_sign_up(
                     # existing rows.
                     first_choice,
                     first_choice, second_choice, third_choice,
+                    how_hear, agreement_signature,
                 )
             )
         except psycopg2.errors.UniqueViolation as err:
@@ -1052,6 +1105,16 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
             "a form filled out that way won't count.\n"
         )
 
+    html_body += (
+        "<p>If you can't make your appointment, need to reschedule, or find "
+        "out you can't donate, email "
+        f'<a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>.</p>'
+    )
+    text_body += (
+        "\nIf you can't make your appointment, need to reschedule, or find out "
+        f"you can't donate, email {CONTACT_EMAIL}.\n"
+    )
+
     html_body += "<p>See you at the drive,<br>MVHS Blood Drive</p>"
     text_body += "\nSee you at the drive,\nMVHS Blood Drive\n"
 
@@ -1083,6 +1146,8 @@ def create_student_sign_up(sign_up: StudentSignUp, background: BackgroundTasks):
         first_choice=sign_up.first_choice,
         second_choice=sign_up.second_choice,
         third_choice=sign_up.third_choice,
+        how_hear=sign_up.how_hear,
+        agreement_signature=sign_up.agreement_signature,
     )
     background.add_task(_send_sign_up_email, created)
     return created
@@ -1115,7 +1180,7 @@ SIGN_UP_COLUMNS = """
     id, full_name, is_student, student_id, age, email_address,
     grade, confirmed, time_slot, first_choice, second_choice, third_choice,
     participant_type, time_in, time_canteen, time_out, deferred,
-    attendance_cleared, preferred_name
+    attendance_cleared, preferred_name, how_hear, agreement_signature
 """
 
 
@@ -1133,6 +1198,7 @@ def _row_to_sign_up(row) -> SignUpRow:
         # DEFAULT FALSE, but a row read mid-migration could still be None.
         deferred=bool(row[16]), attendance_cleared=bool(row[17]),
         preferred_name=row[18],
+        how_hear=row[19], agreement_signature=row[20],
     )
 
 
@@ -1300,6 +1366,22 @@ def _ensure_day_of_columns() -> None:
             """ALTER TABLE sign_ups
                ADD COLUMN IF NOT EXISTS attendance_cleared BOOLEAN
                NOT NULL DEFAULT FALSE"""
+        )
+
+
+def _ensure_student_agreement_columns() -> None:
+    """Add the signature from the student confirm page.
+
+    Nullable: teachers and community members aren't asked, and rows from
+    before it existed have none. (`how_hear`, the other answer on that page,
+    was added to the database by hand.)
+    """
+    with db_cursor(commit=True) as cur:
+        # The name they typed to agree to show up on time, tell their teacher,
+        # and reply to their confirmation email if plans change.
+        cur.execute(
+            """ALTER TABLE sign_ups
+               ADD COLUMN IF NOT EXISTS agreement_signature VARCHAR(50)"""
         )
 
 

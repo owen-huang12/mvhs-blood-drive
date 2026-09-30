@@ -3,6 +3,9 @@
    expanded sections stack with the same gap. */
 .form-section { margin-top: var(--space-lg); }
 
+.form-prompt a,
+.eligibility-list a { color: var(--coral); }
+
 .form-prompt { font-size: 1rem; margin-bottom: var(--space-lg); color: #5f5a56; line-height: 1.65; }
 
 .signup-form { display: flex; flex-direction: column; gap: var(--space-lg); }
@@ -73,6 +76,8 @@
 
 .required { color: var(--coral); }
 
+.optional { color: #9a938d; }
+
 
 /* ── Masked field with a reveal toggle ─────────────────────────────── */
 
@@ -109,18 +114,17 @@
 .consent-block {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: var(--space-md);
   margin-bottom: var(--space-lg);
 }
 
-/* Same card-with-a-control shape as .grade-radio, so the two read as one
-   family. Wrapped in the label so the text is part of the hit area. */
+/* Square, to match the link buttons beside it. Wrapped in the label so the
+   text is part of the hit area. */
 .consent-check {
   display: flex;
   align-items: flex-start;
   gap: var(--space-sm);
-  max-width: 620px;
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 0.98rem;
   line-height: 1.5;
@@ -129,7 +133,7 @@
   padding: 14px 18px;
   background: #fff;
   border: 1px solid #e4e0dd;
-  border-radius: 12px;
+  border-radius: 0;
   transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
@@ -167,19 +171,37 @@
   background-repeat: no-repeat;
 }
 
+/* The two consent forms split the width evenly, side by side. */
 .consent-form-links {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm) var(--space-md);
+  gap: var(--space-md);
+  width: 100%;
   margin-bottom: var(--space-lg);
 }
+
+/* Tall blocks rather than a strip, so each reads as a document to open. */
+.consent-form-links .consent-form-link {
+  flex: 1 1 0;
+  justify-content: center;
+  text-align: center;
+  min-height: 120px;
+  padding: 20px 24px;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+/* A color per language, so the two are easy to tell apart at a glance. */
+.consent-form-link.is-english { background-color: #5CABFF; }
+.consent-form-link.is-english:hover { background-color: #4a9aee; }
+.consent-form-link.is-spanish { background-color: #FF925C; }
+.consent-form-link.is-spanish:hover { background-color: #f5813f; }
 
 /* Inside .consent-block, the block's own gap does the spacing. */
 .consent-block .form-prompt,
 .consent-block .consent-form-links { margin-bottom: 0; }
 
-/* Outlined rather than solid: the coral fill is reserved for the primary
-   action on the page ("Back to home"). */
+/* Links out to a PDF or another site: solid and square, so they read as
+   something to open rather than as the page's rounded submit button. */
 .consent-form-link {
   display: inline-flex;
   align-items: center;
@@ -187,16 +209,16 @@
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 0.95rem;
   text-decoration: none;
-  padding: 11px 26px;
-  color: var(--coral);
-  background: #fff;
-  border: 1.5px solid var(--coral);
-  border-radius: 12px;
+  padding: 12px 26px;
+  color: #fff;
+  background-color: var(--coral);
+  border: none;
+  border-radius: 0;
   cursor: pointer;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition: background-color 0.18s ease;
 }
 
-.consent-form-link:hover { background-color: var(--coral); color: #fff; }
+.consent-form-link:hover { background-color: #e2544b; }
 
 /* Stroked in currentColor, so it turns white with the text on hover. */
 .external-link-icon { width: 15px; height: 15px; flex-shrink: 0; }
@@ -256,3 +278,21 @@
 }
 
 .submit-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ── Eligibility and agreement (end of the student form) ─────────────── */
+
+.eligibility-list {
+  padding-left: 22px;
+  margin-bottom: var(--space-lg);
+  color: #5f5a56;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.eligibility-list li + li { margin-top: 2px; }
+
+/* Its list sits right under it. */
+.form-prompt.agreement-intro { margin-bottom: var(--space-sm); }
+
+.eligibility-check { margin-top: var(--space-lg); }
+

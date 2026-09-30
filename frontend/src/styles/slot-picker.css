@@ -116,6 +116,45 @@
   overflow-y: auto;
 }
 
+/* ── Preferred-slot menu (right-click on a booked row) ─────────────── */
+
+/* Fixed, like the capacity panel: it's anchored to the click and must not be
+   clipped by the table. No overflow: hidden, or the arrow would be cut off. */
+.preferred-panel {
+  position: fixed;
+  z-index: 70;
+  width: 250px;
+  padding: 12px var(--space-md) var(--space-md);
+  background: #fff;
+  border: 1px solid #1a1a1a;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+
+/* A small square turned 45°, bordered on the two sides that face out, so it
+   reads as a point on the panel's edge aimed at the click. */
+.preferred-panel-arrow {
+  position: absolute;
+  top: -6px;
+  left: calc(var(--arrow-x, 20px) - 5px);
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border-top: 1px solid #1a1a1a;
+  border-left: 1px solid #1a1a1a;
+  transform: rotate(45deg);
+}
+
+/* Opened above the click: the arrow moves to the bottom edge and flips. */
+.preferred-panel.is-above .preferred-panel-arrow {
+  top: auto;
+  bottom: -6px;
+  border-top: none;
+  border-left: none;
+  border-right: 1px solid #1a1a1a;
+  border-bottom: 1px solid #1a1a1a;
+}
+
 /* ── Capacity picker ───────────────────────────────────────────────── */
 
 /* Fixed rather than absolute: it is anchored to the pointer, so it must not

@@ -6,6 +6,8 @@ import TimeSlotChoices from "./TimeSlotChoices.jsx";
 import { REQUIRED_CHOICES, SLOT_NOTICE_DEADLINE } from "./timeSlots.js";
 import { signUpAdult } from "./api.js";
 import { ApiError } from "./api.js";
+import ContactNote from "./ContactNote.jsx";
+import { useFullNameCheck } from "./fullName.js";
 
 /**
  * Sign-up form for teachers and community members.
@@ -24,6 +26,7 @@ export default function AdultSignUpForm({ participantType }) {
     const [submitting, setSubmitting] = useState(false);
     const [registered, setRegistered] = useState(false);
     const navigate = useNavigate();
+    const nameRef = useFullNameCheck(name);
 
     const handleSubmit = async (event) => {
         event.preventDefault();
@@ -72,6 +75,7 @@ export default function AdultSignUpForm({ participantType }) {
                             We'll send your assigned donation time slot to{" "}
                             <strong>{email}</strong> by {SLOT_NOTICE_DEADLINE}.
                         </p>
+                        <ContactNote />
                         <button
                             type="button"
                             className="submit-btn"
@@ -103,6 +107,7 @@ export default function AdultSignUpForm({ participantType }) {
                                 Full Legal Name <span className="required">*</span>
                             </label>
                             <input
+                                ref={nameRef}
                                 id="name"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
@@ -113,7 +118,9 @@ export default function AdultSignUpForm({ participantType }) {
                         </div>
 
                         <div className="form-field">
-                            <label htmlFor="preferredName">Preferred Name</label>
+                            <label htmlFor="preferredName">
+                                Preferred Name <span className="optional">(optional)</span>
+                            </label>
                             <input
                                 id="preferredName"
                                 value={preferredName}
