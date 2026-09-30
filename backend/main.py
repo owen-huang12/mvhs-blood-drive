@@ -766,11 +766,9 @@ def _send_email(
     """
     html_body += (
         '<p style="color:#6b6b6b;font-size:13px">Questions? Email '
-        f'<a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a> '
-        "or reply to this email.</p>"
+        f'<a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>.</p>'
     )
-    text_body += f"\nQuestions? Email {CONTACT_EMAIL} or reply to this email.\n"
-
+    text_body += f"\nQuestions? Email {CONTACT_EMAIL}.\n"
     if not RESEND_API_KEY:
         if os.environ.get("APP_ENV") == "production":
             logger.error("RESEND_API_KEY is not set; no email sent to %s.", to)
@@ -786,6 +784,10 @@ def _send_email(
         "subject": subject,
         "html": html_body,
         "text": text_body,
+        # A fresh ID per email stops Gmail threading it with earlier ones
+        # that share the subject. Threaded, it hides whatever repeats an
+        # earlier message (the choices, the consent-form steps) behind "…".
+        "headers": {"X-Entity-Ref-ID": secrets.token_hex(16)},
     }
     if attachments:
         params["attachments"] = attachments
@@ -798,8 +800,16 @@ def _send_email(
         logger.exception("Could not send %r to %s", subject, to)
 
 
-def _first_name(full_name: str) -> str:
-    return full_name.split()[0] if full_name.strip() else "there"
+def _first_name(name: str) -> str:
+    """The first word of a name, capitalised, for a greeting.
+
+    Only the first letter is raised; the rest is left alone so names like
+    "DeShawn" keep their own capitals.
+    """
+    words = name.split()
+    if not words:
+        return "there"
+    return words[0][0].upper() + words[0][1:]
 
 
 def _send_reset_email(to: str, full_name: str, link: str) -> None:
@@ -1087,7 +1097,7 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
         sign_up.participant_type == "student"
         and sign_up.age < CONSENT_REQUIRED_UNDER_AGE
     )
-    first_name = sign_up.preferred_name or _first_name(sign_up.full_name)
+    first_name = _first_name(sign_up.preferred_name or sign_up.full_name)
     choices = (sign_up.first_choice, sign_up.second_choice, sign_up.third_choice)
     labels = ("1st choice", "2nd choice", "3rd choice")
 
