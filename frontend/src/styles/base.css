@@ -48,4 +48,7 @@ body {
   background-color: var(--coral-bg);
   color: #1a1a1a;
   min-height: 100vh;
+  /* The visible height (see .home-page in home.css), so the body alone
+     can't make the home page scroll. */
+  min-height: 100dvh;
 }

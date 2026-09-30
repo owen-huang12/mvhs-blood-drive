@@ -25,25 +25,29 @@ export default function HomePage() {
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Am I eligible to donate to the Stanford Blood Drive?">
-                <div className="overview-text">
-                    <p>
-                        In general, 16-year-olds may donate with parent or legal guardian consent, while donors 17 and older do not need parental consent. Donors must also meet additional eligibility requirements, such as height/weight requirements, be feeling well, and complete a health history screening. Because eligibility can vary based on individual circumstances, please review Stanford Blood Center’s full eligibility requirements below.
-                    </p>
-                </div>
-                <div className="home-links">
-                    <EligibilityLink />
-                    <ConsentFormLinks />
-                </div>
-            </CollapsibleSection>
+            {/* The last section and the contact box, kept at least a screen
+                tall so the section can snap to the top (see .home-tail). */}
+            <div className="home-tail">
+                <CollapsibleSection title="Am I eligible to donate to the Stanford Blood Drive?">
+                    <div className="overview-text">
+                        <p>
+                            In general, 16-year-olds may donate with parent or legal guardian consent, while donors 17 and older do not need parental consent. Donors must also meet additional eligibility requirements, such as height/weight requirements, be feeling well, and complete a health history screening. Because eligibility can vary based on individual circumstances, please review Stanford Blood Center’s full eligibility requirements below.
+                        </p>
+                    </div>
+                    <div className="home-links">
+                        <EligibilityLink />
+                        <ConsentFormLinks />
+                    </div>
+                </CollapsibleSection>
 
-            <aside className="home-contact">
-                <p>
-                    Questions about the blood drive, or need to change or cancel
-                    your appointment? Email us at{" "}
-                    <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
-                </p>
-            </aside>
+                <aside className="home-contact">
+                    <p>
+                        Questions about the blood drive, or need to change or cancel
+                        your appointment? Email us at{" "}
+                        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+                    </p>
+                </aside>
+            </div>
 
             {/* Opens into the three participant routes on hover. */}
             <SignUpCta />

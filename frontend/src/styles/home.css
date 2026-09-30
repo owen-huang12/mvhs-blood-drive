@@ -16,7 +16,9 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  background-color: var(--coral);
+  /* A step lighter than --coral, so the pill doesn't read as one of the coral
+     section title bars it floats over. */
+  background-color: #F5847B;
   border: 1px solid var(--red);
   border-radius: 50px;
   padding: 10px 20px 10px 10px;
@@ -122,11 +124,16 @@
 /* Home page — full width, not capped like the form pages */
 .home-page {
   max-width: none;
-  /* Bottom room for the fixed sign-up pill (40px up, ~66px tall) plus a
-     small gap, so the last section never scrolls up under it. */
-  padding: 0 48px 112px;
+  /* No bottom padding: the room for the sign-up pill is on .home-tail. */
+  padding: 0 48px;
   background-color: var(--alabaster);
+  /* dvh, not vh: on phones 100vh is the height with the browser's toolbars
+     hidden, which they never are here (the page itself doesn't scroll), so
+     the bottom of the page, and the room left for the sign-up pill, sat
+     behind Safari's toolbar and the pill covered the contact email. dvh is
+     the height actually visible. vh first for browsers without dvh. */
   height: calc(100vh - 88px);
+  height: calc(100dvh - 88px);
   overflow-y: auto;
   scroll-snap-type: y mandatory;
   scrollbar-width: none;
@@ -135,6 +142,18 @@
 .home-page::-webkit-scrollbar { display: none; }
 
 .home-page > section { scroll-snap-align: start; }
+
+/* The last section and the contact box. At least as tall as the page, so
+   the last section can scroll all the way to the top and snap there; without
+   this, on a phone there wasn't enough below it and it stopped short with
+   the previous section still showing. Taller than the page, it scrolls freely
+   down to the contact box. The bottom padding is room for the fixed sign-up
+   pill (40px up, ~66px tall) plus a small gap, so nothing ends up under it. */
+.home-tail {
+  min-height: 100%;
+  padding-bottom: 112px;
+  scroll-snap-align: start;
+}
 
 .home-page .section-title {
   width: auto;
@@ -158,6 +177,7 @@
      without scrolling. Still full width: object-fit: cover crops the photo's
      top and bottom rather than leaving gaps at the sides. */
   height: calc((100vh - 88px - 90px) * 0.75);
+  height: calc((100dvh - 88px - 90px) * 0.75);
   overflow: hidden;
   scroll-snap-align: start;
 }
@@ -202,20 +222,19 @@
   .home-links { flex-direction: column; }
 }
 
-/* Contact box at the foot of the home page. An aside rather than a section,
-   so it doesn't join the sections' snap points; it snaps by its bottom edge
-   instead, which keeps the very end of the page reachable. */
+/* Contact box at the foot of the home page. No snap point of its own: an
+   end-aligned one would stop the page short of the last section's. */
 /* The gap above the contact box matches the one between the buttons in the
-   row above it (--space-md), so that section's bottom padding comes down to
-   that and the box adds none of its own. */
-.home-page > section:last-of-type .collapsible-inner { padding-bottom: var(--space-md); }
+   row above it (--space-md). It's the box's own margin rather than that
+   section's bottom padding, so it stays when the section is collapsed and
+   the box doesn't butt up against the title bar. */
+.home-tail .collapsible-inner { padding-bottom: 0; }
 
 .home-contact {
-  margin-top: 0;
+  margin-top: var(--space-md);
   padding: var(--space-lg);
   background: #fff;
   border: 1px solid #cfc9c4;
-  scroll-snap-align: end;
   font-size: 1rem;
   line-height: 1.8;
   color: #333;
