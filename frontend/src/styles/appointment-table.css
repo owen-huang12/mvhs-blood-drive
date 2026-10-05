@@ -53,6 +53,8 @@
 
 .appointment-email { color: #5f5a56; }
 
+.appointment-age { color: #5f5a56; white-space: nowrap; }
+
 .appointment-actions { width: 1%; }
 
 .unconfirm-btn {

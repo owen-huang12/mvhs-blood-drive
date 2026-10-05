@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import BloodDriveOverview from "./BloodDriveOverview.jsx";
 import CollapsibleSection from "./CollapsibleSection.jsx";
 import TimeSlotChoices from "./TimeSlotChoices.jsx";
+import ChoiceClassFields from "./ChoiceClassFields.jsx";
 import { useFullNameCheck } from "./fullName.js";
 import { REQUIRED_CHOICES } from "./timeSlots.js";
 
@@ -49,6 +50,14 @@ export default function StudentPersonalInfo() {
             Boolean
         )
     );
+    // Keyed by slot, rebuilt from the ordered list "Go back and edit" sends.
+    const [classes, setClasses] = useState(() =>
+        Object.fromEntries(
+            [prior?.first_choice, prior?.second_choice, prior?.third_choice]
+                .map((slot, i) => [slot, prior?.choice_classes?.[i]])
+                .filter(([slot, value]) => slot && value)
+        )
+    );
     const [error, setError] = useState("");
     const navigate = useNavigate();
     const nameRef = useFullNameCheck(name);
@@ -85,6 +94,10 @@ export default function StudentPersonalInfo() {
                     first_choice,
                     second_choice,
                     third_choice,
+                    // The class missed at each choice, in the same order.
+                    choice_classes: selectedSlots.map(
+                        (slot) => classes[slot] ?? { teacher: "", room: "" }
+                    ),
                     // Answered on the confirm screen; carried through so
                     // "Go back and edit" doesn't wipe them.
                     how_hear: prior?.how_hear,
@@ -175,6 +188,11 @@ export default function StudentPersonalInfo() {
                         <TimeSlotChoices
                             selected={selectedSlots}
                             onChange={setSelectedSlots}
+                        />
+                        <ChoiceClassFields
+                            selected={selectedSlots}
+                            classes={classes}
+                            onChange={setClasses}
                         />
                     </CollapsibleSection>
 

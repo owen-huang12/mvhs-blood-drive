@@ -114,6 +114,7 @@ export default function AppointmentTable({
                             <th>Status</th>
                             <th>Student ID</th>
                             <th>Primary Email</th>
+                            <th>Age</th>
                             <th aria-label="Actions" />
                         </tr>
                     </thead>
@@ -208,7 +209,7 @@ export default function AppointmentTable({
                                         </td>
     
                                         {!booked ? (
-                                            <td colSpan={5} />
+                                            <td colSpan={6} />
                                         ) : (
                                             <>
                                                 <td className="drag-name">
@@ -245,6 +246,10 @@ export default function AppointmentTable({
                                                 })()}
                                                 <td className="appointment-email">
                                                     {row.signUp.email_address}
+                                                </td>
+                                                {/* Only students have an age to show. */}
+                                                <td className="appointment-age">
+                                                    {isStudent(row.signUp) && row.signUp.age}
                                                 </td>
                                                 <td className="appointment-actions">
                                                     <button

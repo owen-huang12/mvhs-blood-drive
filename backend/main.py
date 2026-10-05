@@ -9,6 +9,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import secrets
 import threading
 import time
@@ -158,6 +159,7 @@ async def lifespan(_: FastAPI):
     _ensure_participant_type_column()
     _ensure_day_of_columns()
     _ensure_student_agreement_columns()
+    _ensure_choice_class_columns()
     _ensure_password_reset_table()
     _ensure_unique_constraints()
     yield
@@ -256,6 +258,8 @@ FIELD_LABELS = {
     "first_choice": "1st choice",
     "second_choice": "2nd choice",
     "third_choice": "3rd choice",
+    "teacher": "Teacher",
+    "room": "Room number",
     "password": "Password",
     "invite_code": "Admin code",
 }
@@ -476,6 +480,11 @@ class SignUpRow(BaseModel):
     first_choice: str
     second_choice: str
     third_choice: str
+    # The class a student would miss at each choice, as "<teacher>, Rm
+    # <room>". None for adults and for rows from before they were asked.
+    first_choice_class: str | None = None
+    second_choice_class: str | None = None
+    third_choice_class: str | None = None
     # Day-of state. Null timestamps mean that step hasn't happened yet, which
     # is the correct reading for every row until the drive itself.
     time_in: datetime | None = None
@@ -537,6 +546,30 @@ class SlotCapacityRow(BaseModel):
     base: int
 
 
+def _capitalise_words(value: str) -> str:
+    """Raise the first letter of each word, and after a hyphen or apostrophe
+    ("o'brien" -> "O'Brien"). The rest is left alone, so "McKenzie" keeps its
+    capital K."""
+    return re.sub(r"(^|[\s\-'])(\w)", lambda m: m.group(1) + m.group(2).upper(), value)
+
+
+class ChoiceClass(BaseModel):
+    """The class a student would miss for one of their choices."""
+    teacher: Annotated[_text(50), AfterValidator(_capitalise_words)]
+    # Free text: some rooms have letters ("A301") or are names.
+    room: _text(20)
+
+    def as_text(self) -> str:
+        """"Marie Clarke, Rm 301". A room typed as "Rm 301" or "Room 301"
+        loses its own prefix, so it doesn't come out "Rm Rm 301"."""
+        room = self.room
+        for prefix in ("room", "rm.", "rm"):
+            if room.lower().startswith(prefix):
+                room = room[len(prefix):].strip() or room
+                break
+        return f"{self.teacher}, Rm {room}"
+
+
 class StudentSignUp(BaseModel):
     full_name: Name
     preferred_name: PreferredName = None
@@ -549,6 +582,8 @@ class StudentSignUp(BaseModel):
     first_choice: Choice
     second_choice: Choice
     third_choice: Choice
+    # One per choice, in the same order.
+    choice_classes: Annotated[list[ChoiceClass], Field(min_length=3, max_length=3)]
     how_hear: HowHear
     agreement_signature: Name
     is_student: bool = True
@@ -932,6 +967,7 @@ def _insert_sign_up(
     third_choice: str,
     how_hear: str | None = None,
     agreement_signature: str | None = None,
+    choice_classes: tuple[str | None, str | None, str | None] = (None, None, None),
 ) -> SignUpRow:
     """Store one sign-up of any participant type, rejecting duplicates.
 
@@ -988,9 +1024,11 @@ def _insert_sign_up(
                     full_name, preferred_name, is_student, participant_type,
                     student_id, age, timestamp, email_address, grade, confirmed,
                     time_slot, first_choice, second_choice, third_choice,
-                    how_hear, agreement_signature
+                    how_hear, agreement_signature,
+                    first_choice_class, second_choice_class, third_choice_class
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s)
                 RETURNING {SIGN_UP_COLUMNS}
                 """,
                 (
@@ -1007,6 +1045,7 @@ def _insert_sign_up(
                     first_choice,
                     first_choice, second_choice, third_choice,
                     how_hear, agreement_signature,
+                    *choice_classes,
                 )
             )
         except psycopg2.errors.UniqueViolation as err:
@@ -1198,6 +1237,7 @@ def create_student_sign_up(sign_up: StudentSignUp, background: BackgroundTasks):
         third_choice=sign_up.third_choice,
         how_hear=sign_up.how_hear,
         agreement_signature=sign_up.agreement_signature,
+        choice_classes=tuple(c.as_text() for c in sign_up.choice_classes),
     )
     background.add_task(_send_sign_up_email, created)
     return created
@@ -1232,7 +1272,8 @@ SIGN_UP_COLUMNS = """
     id, full_name, is_student, student_id, age, email_address,
     grade, confirmed, time_slot, first_choice, second_choice, third_choice,
     participant_type, time_in, time_canteen, time_out, deferred,
-    attendance_cleared, preferred_name, how_hear, agreement_signature
+    attendance_cleared, preferred_name, how_hear, agreement_signature,
+    first_choice_class, second_choice_class, third_choice_class
 """
 
 
@@ -1251,6 +1292,8 @@ def _row_to_sign_up(row) -> SignUpRow:
         deferred=bool(row[16]), attendance_cleared=bool(row[17]),
         preferred_name=row[18],
         how_hear=row[19], agreement_signature=row[20],
+        first_choice_class=row[21], second_choice_class=row[22],
+        third_choice_class=row[23],
     )
 
 
@@ -1439,6 +1482,21 @@ def _ensure_student_agreement_columns() -> None:
         cur.execute(
             """ALTER TABLE sign_ups
                ADD COLUMN IF NOT EXISTS agreement_signature VARCHAR(50)"""
+        )
+
+
+def _ensure_choice_class_columns() -> None:
+    """Add the class a student would miss at each of their three choices.
+
+    Nullable: adults have none, and rows from before they were asked have
+    none either. Safe alongside running the same ALTER by hand.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """ALTER TABLE sign_ups
+               ADD COLUMN IF NOT EXISTS first_choice_class TEXT,
+               ADD COLUMN IF NOT EXISTS second_choice_class TEXT,
+               ADD COLUMN IF NOT EXISTS third_choice_class TEXT"""
         )
 
 
