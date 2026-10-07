@@ -146,7 +146,7 @@ export default function StudentPersonalInfo() {
                         />
                         <Field
                             id="age"
-                            label="Age"
+                            label="Age by 10/16"
                             type="number"
                             min={MIN_AGE}
                             max={25}
