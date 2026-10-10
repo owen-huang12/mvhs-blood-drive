@@ -76,10 +76,10 @@ export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
 /**
  * Periods that are nobody's class: a student picking one of these misses
  * nothing, so they're never asked for a teacher or room. The combined labels
- * ("Lunch/Period 6", "Brunch/Period 4") are deliberately left out — half of
- * one of those is class time.
+ * ("Lunch/Period 6", "Brunch/Period 4", "Period 2/Tutorial") are deliberately
+ * left out — half of one of those is class time.
  */
-const FREE_PERIODS = new Set(["Brunch", "Lunch"]);
+const FREE_PERIODS = new Set(["Brunch", "Lunch", "Tutorial"]);
 
 /** Placeholders stored for a choice where the student is in no class. */
 export const FREE_PERIOD_CLASS = { teacher: "Free Period", room: "XXX" };
