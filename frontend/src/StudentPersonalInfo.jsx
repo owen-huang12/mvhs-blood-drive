@@ -5,7 +5,11 @@ import CollapsibleSection from "./CollapsibleSection.jsx";
 import TimeSlotChoices from "./TimeSlotChoices.jsx";
 import ChoiceClassFields from "./ChoiceClassFields.jsx";
 import { useFullNameCheck } from "./fullName.js";
-import { REQUIRED_CHOICES } from "./timeSlots.js";
+import {
+    FREE_PERIOD_CLASS,
+    REQUIRED_CHOICES,
+    isFreePeriodSlot,
+} from "./timeSlots.js";
 
 const GRADES = ["9th", "10th", "11th", "12th"];
 const MIN_AGE = 16;
@@ -51,11 +55,18 @@ export default function StudentPersonalInfo() {
         )
     );
     // Keyed by slot, rebuilt from the ordered list "Go back and edit" sends.
+    // A choice that came back as the free-period placeholder is restored as a
+    // ticked box, not as those words sitting in the teacher and room inputs.
     const [classes, setClasses] = useState(() =>
         Object.fromEntries(
             [prior?.first_choice, prior?.second_choice, prior?.third_choice]
                 .map((slot, i) => [slot, prior?.choice_classes?.[i]])
                 .filter(([slot, value]) => slot && value)
+                .map(([slot, value]) =>
+                    value.teacher === FREE_PERIOD_CLASS.teacher
+                        ? [slot, { teacher: "", room: "", free: true }]
+                        : [slot, value]
+                )
         )
     );
     const [error, setError] = useState("");
@@ -95,9 +106,15 @@ export default function StudentPersonalInfo() {
                     second_choice,
                     third_choice,
                     // The class missed at each choice, in the same order.
-                    choice_classes: selectedSlots.map(
-                        (slot) => classes[slot] ?? { teacher: "", room: "" }
-                    ),
+                    // A choice with no class to miss still sends a teacher
+                    // and room, so every row reads the same way downstream.
+                    choice_classes: selectedSlots.map((slot) => {
+                        const value = classes[slot];
+                        if (isFreePeriodSlot(slot) || value?.free) {
+                            return { ...FREE_PERIOD_CLASS };
+                        }
+                        return value ?? { teacher: "", room: "" };
+                    }),
                     // Answered on the confirm screen; carried through so
                     // "Go back and edit" doesn't wipe them.
                     how_hear: prior?.how_hear,

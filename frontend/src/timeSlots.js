@@ -72,6 +72,22 @@ export const SLOT_NOTICE_DEADLINE = "10/14 at 8:00 AM";
 export const SHORT_CHOICE_LABELS = ["1st", "2nd", "3rd"];
 
 export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];
+
+/**
+ * Periods that are nobody's class: a student picking one of these misses
+ * nothing, so they're never asked for a teacher or room. The combined labels
+ * ("Lunch/Period 6", "Brunch/Period 4") are deliberately left out — half of
+ * one of those is class time.
+ */
+const FREE_PERIODS = new Set(["Brunch", "Lunch"]);
+
+/** Placeholders stored for a choice where the student is in no class. */
+export const FREE_PERIOD_CLASS = { teacher: "Free Period", room: "XXX" };
+
+/** Is this slot's whole window a break, rather than any class? */
+export const isFreePeriodSlot = (slotKey) =>
+    FREE_PERIODS.has(parseSlot(slotKey).period);
+
 export const REQUIRED_CHOICES = 3;
 
 /**

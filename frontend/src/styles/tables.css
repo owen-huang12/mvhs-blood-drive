@@ -121,6 +121,9 @@
   margin-bottom: 12px;
 }
 
+/* Ticked, the header is the whole row: nothing follows it to be spaced from. */
+.choice-class-slot:last-child { margin-bottom: 0; }
+
 .choice-class-inputs {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -128,6 +131,73 @@
 }
 
 .choice-class-inputs .form-field { margin-bottom: 0; }
+
+/* The "Teacher" label and the free-period toggle share one line, the toggle
+   pushed to the right edge of the field below it. */
+.choice-class-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+/* The label already carries the field's bottom margin, so the row must not
+   add another one of its own. */
+.choice-class-head > label:first-child { margin-bottom: 0; }
+
+/* An aside beside the label, not a question of its own: smaller and grey so
+   it reads as a way out of the inputs rather than another thing to fill in. */
+.choice-class-free-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: #8c8580;
+  cursor: pointer;
+}
+
+.choice-class-free-toggle span { text-decoration: underline; }
+
+/* On the slot header, it is pushed to the far right of the card. */
+.choice-class-slot > .choice-class-free-toggle { margin-left: auto; }
+
+.choice-class-free-toggle:hover { color: #5f5a56; }
+
+/* Drawn rather than accent-coloured, matching .consent-check on the form. */
+.choice-class-free-toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  /* Must reset: this box sits inside a .form-field, whose input rule sets a
+     padding and radius that would otherwise swell it into a rounded slab. */
+  padding: 0;
+  border: 1px solid #cfc9c4;
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+/* Same reason: the field's focus ring is sized for a text input. */
+.choice-class-free-toggle input[type="checkbox"]:hover { border-color: #b3aca7; }
+
+.choice-class-free-toggle input[type="checkbox"]:focus-visible {
+  border-color: var(--slate);
+  box-shadow: 0 0 0 3px rgba(32, 159, 228, 0.18);
+}
+
+.choice-class-free-toggle input[type="checkbox"]:checked {
+  background-color: var(--slate);
+  border-color: var(--slate);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3L12.5 5'/%3E%3C/svg%3E");
+  background-size: 10px 10px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
 
 /* Side by side is too tight on a phone: stack them instead. */
 @media (max-width: 640px) {
