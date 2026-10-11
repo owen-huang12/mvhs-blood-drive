@@ -22,13 +22,27 @@ export function endSession() {
     window.location.assign("/coordinators?expired=1");
 }
 
-export function isTokenValid() {
+/** The token's payload, or null if there isn't a readable one. */
+function tokenPayload() {
     const token = getToken();
-    if (!token) return false;
+    if (!token) return null;
     try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
-        return payload.exp * 1000 > Date.now();
+        return JSON.parse(atob(token.split(".")[1]));
     } catch {
-        return false;
+        return null;
     }
+}
+
+/**
+ * Signed in as the attendance clerk rather than a coordinator.
+ *
+ * The API decides this too — her token is refused everywhere but the roster,
+ * the stream and her own filing. This copy only keeps the UI honest, so she
+ * is not shown a dashboard that would fail on every request.
+ */
+export const isClerk = () => tokenPayload()?.role === "attendance_clerk";
+
+export function isTokenValid() {
+    const payload = tokenPayload();
+    return Boolean(payload) && payload.exp * 1000 > Date.now();
 }

@@ -11,6 +11,110 @@
   color: #5f5a56;
 }
 
+/* ── Attendance worklist ───────────────────────────────────────────── */
+
+/* The clerk reads this table right to left: the times and the filing box are
+   the work, the identity columns only tell her whose row it is. So the last
+   five columns are given a floor to sit at and room to breathe, rather than
+   being squeezed to their content until the headers wrap a word per line. */
+.attendance-table .stamp-cell {
+  width: 86px;
+  min-width: 86px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.attendance-table .deferred-cell {
+  width: 74px;
+  min-width: 74px;
+}
+
+.attendance-table .attendance-cell {
+  width: 67px;
+  min-width: 67px;
+}
+
+/* Headers over those columns must not wrap: "Time In" on two lines made the
+   whole header row twice as tall as it needed to be. */
+.attendance-table thead th { white-space: nowrap; }
+
+/* A touch more height per row: this is read standing up, scanning for a name. */
+.attendance-table td { padding-top: 9px; padding-bottom: 9px; }
+
+/* Both carry a minimum, because for an adult the cell holds a drawn rule
+   rather than text — with nothing to size to, the column would otherwise
+   collapse to its header and the rule would be a stub. */
+.attendance-table .grade-cell {
+  width: 1%;
+  min-width: 52px;
+  white-space: nowrap;
+  color: #5f5a56;
+}
+
+.attendance-table .id-cell {
+  width: 1%;
+  min-width: 86px;
+  white-space: nowrap;
+}
+
+/* The identity columns give up their slack first when the table is narrow. */
+.attendance-table .appointment-time {
+  width: 1%;
+  /* Spans every row of its slot; the time stays at the top, beside the first
+     person in it, rather than floating in the middle of the group. */
+  vertical-align: top;
+  color: #1a1a1a;
+}
+
+/* How many people are in the slot, beside its time. Lighter than the time
+   itself: it is a count of the group, not another time. */
+.attendance-table .slot-count {
+  margin-left: 5px;
+  font-size: 0.64rem;
+  color: #8c8580;
+}
+
+/* The chip is as wide as its longest label ("Community Member") and no wider
+   — it was taking space the names and email needed. */
+.attendance-table .status-cell {
+  width: 1%;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* The name is what she scans for, so it gets the slack and is never allowed
+   to wrap onto a second line — one wrapped name sets the height of its whole
+   row, and at this size there is room for all of them. */
+.attendance-table .name-cell {
+  width: 100%;
+  white-space: nowrap;
+}
+
+/* Email is reference, not something scanned, so it is capped rather than
+   given the slack: a long address truncates instead of pushing the name
+   into a wrap. The cap fits the common mvla.net addresses in full. */
+.attendance-table .appointment-email {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  color: #5f5a56;
+}
+
+/* Not applicable, as opposed to not yet filled in.
+   A dashed rule across the whole cell rather than typed hyphens: it fills
+   the column whatever width it settles at, and it cannot be mistaken for a
+   value or dragged into a copied selection. */
+.attendance-table .not-applicable {
+  display: block;
+  width: 100%;
+  /* Centred on the text line, so it sits where a value would. */
+  height: 0;
+  margin: 0.55em 0;
+  border-top: 1px dashed #9a938d;
+}
+
 /* Tap targets, not text links: this is used standing up at a desk. */
 .stamp-btn {
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;

@@ -16,6 +16,8 @@ import RequireAuth from "./RequireAuth.jsx";
 import RequirePhaseTwo from "./RequirePhaseTwo.jsx";
 import DayOfStation from "./DayOfStation.jsx";
 import AttendanceClerk from "./AttendanceClerk.jsx";
+import AttendanceSignIn from "./AttendanceSignIn.jsx";
+import RequireAttendanceAuth from "./RequireAttendanceAuth.jsx";
 import { useScrollToTop } from "./scrollToTop.js";
 
 /**
@@ -71,14 +73,34 @@ export default function App() {
                         </RequireAuth>
                     }
                 />
+                {/* The clerk signs in here, by username. Kept ahead of the
+                    worklist route so signing in is reachable while signed
+                    out, and outside the phase gate so a wrong password on
+                    the day doesn't look like a missing page. */}
+                <Route
+                    path="/coordinators/attendance/sign-in"
+                    element={<AttendanceSignIn />}
+                />
                 <Route
                     path="/coordinators/attendance"
                     element={
-                        <RequireAuth>
+                        <RequireAttendanceAuth>
                             <RequirePhaseTwo>
                                 <AttendanceClerk />
                             </RequirePhaseTwo>
-                        </RequireAuth>
+                        </RequireAttendanceAuth>
+                    }
+                />
+                {/* Short aliases: the clerk is given one URL to type at a
+                    desk, not a path under /coordinators. */}
+                <Route
+                    path="/attendance"
+                    element={<Navigate to="/coordinators/attendance" replace />}
+                />
+                <Route
+                    path="/attendance/sign-in"
+                    element={
+                        <Navigate to="/coordinators/attendance/sign-in" replace />
                     }
                 />
                 <Route element={<PublicLayout />}>

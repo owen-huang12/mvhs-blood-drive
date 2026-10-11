@@ -43,6 +43,21 @@ MIN_PASSWORD_LENGTH = 8
 # bcrypt only reads the first 72 bytes, and bcrypt 5 raises past that.
 MAX_PASSWORD_BYTES = 72
 
+# The attendance clerk signs in with a username rather than an email: she is
+# one person at one desk for one day, so an invited account with a mailbox and
+# a reset flow would be friction for no gain.
+#
+# Her credentials live in the environment, not the coordinators table, which
+# keeps her out of every query that lists or emails coordinators. Set
+# ATTENDANCE_PASSWORD_HASH to a bcrypt hash (see tools/hash_password.py);
+# unset, the account simply does not exist.
+ATTENDANCE_USERNAME = os.environ.get("ATTENDANCE_USERNAME", "attendance")
+ATTENDANCE_PASSWORD_HASH = os.environ.get("ATTENDANCE_PASSWORD_HASH")
+
+# Marks a token as the clerk's. Carried in the JWT so the API can tell her
+# apart from a coordinator without another round trip.
+CLERK_ROLE = "attendance_clerk"
+
 # Password reset email, sent through Resend. The from address must be on the
 # domain verified in the Resend dashboard. With no API key set, the reset link
 # is logged instead of emailed (outside production only), so the flow can be
@@ -347,15 +362,44 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
-def get_current_coordinator(token: str = Depends(oauth2_scheme)):
+def _decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        email: str = payload.get("sub")
-        if email is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        return email
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if payload.get("sub") is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    return payload
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:
+    """Who is calling, as (subject, role). The clerk carries CLERK_ROLE; a
+    coordinator's token has no role, and its subject is their email."""
+    payload = _decode_token(token)
+    return payload["sub"], payload.get("role")
+
+
+def get_coordinator_or_clerk(token: str = Depends(oauth2_scheme)) -> str:
+    """Either role. For the few things the clerk must reach: the roster she
+    works from, the stream that keeps it current, and her own filing."""
+    return _decode_token(token)["sub"]
+
+
+def get_current_coordinator(token: str = Depends(oauth2_scheme)) -> str:
+    """A signed-in coordinator's email.
+
+    The clerk is turned away here. Her token is only good for the attendance
+    worklist, so everything else on the dashboard — the roster with its health
+    answers, the capacity controls, the exports — stays closed to the shared
+    password at the attendance desk.
+    """
+    payload = _decode_token(token)
+    if payload.get("role") == CLERK_ROLE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account can only file attendance.",
+        )
+    return payload["sub"]
 
 
 # models
@@ -631,12 +675,27 @@ def read_root():
 
 @app.post("/login", response_model=Token, dependencies=[rate_limit("login", 10, 600)])
 def login(form: OAuth2PasswordRequestForm = Depends()):
+    typed = form.username.strip()
+
+    # The clerk signs in by username, so she is matched before the table is
+    # consulted at all. Case-insensitive, like the email path below.
+    if ATTENDANCE_PASSWORD_HASH and typed.lower() == ATTENDANCE_USERNAME.lower():
+        if not verify_password(form.password, ATTENDANCE_PASSWORD_HASH):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+            )
+        token = create_access_token(
+            {"sub": ATTENDANCE_USERNAME, "role": CLERK_ROLE}
+        )
+        return {"access_token": token, "token_type": "bearer"}
+
     with db_cursor() as cur:
         # Matched case-insensitively, the same way registration checks for an
         # existing account, so capitalisation can't lock someone out.
         cur.execute(
             "SELECT password_hash, email FROM coordinators WHERE LOWER(email) = LOWER(%s)",
-            (form.username.strip(),)
+            (typed,)
         )
         row = cur.fetchone()
 
@@ -1302,7 +1361,7 @@ def _sse_frame(event_type: str, data: dict) -> str:
 
 
 @app.get("/events")
-async def stream_events(_: str = Depends(get_current_coordinator)):
+async def stream_events(_: str = Depends(get_coordinator_or_clerk)):
     """Push sign-up changes to open dashboards as Server-Sent Events.
 
     Authenticated like every other coordinator route, which means the client
@@ -1337,7 +1396,7 @@ async def stream_events(_: str = Depends(get_current_coordinator)):
 
 
 @app.get("/sign-ups", response_model=list[SignUpRow])
-def list_sign_ups(_: str = Depends(get_current_coordinator)):
+def list_sign_ups(_: str = Depends(get_coordinator_or_clerk)):
     """Every sign-up. The dashboard splits them into pending vs confirmed."""
     with db_cursor() as cur:
         cur.execute(f"SELECT {SIGN_UP_COLUMNS} FROM sign_ups ORDER BY id")
@@ -1792,7 +1851,7 @@ def set_deferred(
 def set_attendance(
     sign_up_id: int,
     change: AttendanceChange,
-    _: str = Depends(get_current_coordinator),
+    _: str = Depends(get_coordinator_or_clerk),
 ):
     """Record that the clerk has filed this student in the school's system.
 

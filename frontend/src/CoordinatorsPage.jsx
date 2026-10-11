@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import icon from "./assets/icon.png";
+import PasswordField from "./PasswordField.jsx";
 import { saveToken } from "./auth.js";
 import { login } from "./api.js";
 
@@ -68,17 +69,14 @@ export default function CoordinatorsPage() {
                             required
                         />
                     </div>
-                    <div className="form-field">
-                        <label htmlFor="password">Password</label>
-                        <input
-                            id="password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Enter your password"
-                            required
-                        />
-                    </div>
+                    <PasswordField
+                        id="password"
+                        label="Password"
+                        value={password}
+                        onChange={setPassword}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                    />
 
                     {error && <p className="login-error">{error}</p>}
 

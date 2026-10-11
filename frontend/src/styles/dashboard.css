@@ -34,18 +34,30 @@
 
 .profile-name { white-space: nowrap; }
 
+/* The dashboards are dense working pages, not reading pages: everything from
+   here down is set at 80% of the public site's scale, which is what these
+   screens looked like at 80% browser zoom. It buys a few more rows of table
+   on one screen without anyone having to zoom out first. */
 .dashboard-section-title {
   width: 100%;
   background-color: var(--coral);
   color: #fff;
   font-family: 'Antic Slab', serif;
   font-weight: 600;
-  font-size: 1.05rem;
+  font-size: 0.84rem;
   letter-spacing: 0.01em;
-  padding: 13px 48px;
+  padding: 10px 38px;
 }
 
-.dashboard-body { padding: 40px 48px; color: #333; font-size: 1rem; line-height: 1.8; }
+.dashboard-body { padding: 32px 38px; color: #333; font-size: 0.8rem; line-height: 1.8; }
+
+/* The site header is shared with the public pages, so it is scaled here
+   rather than in header.css — only the dashboards shrink. */
+.dashboard-page .header { padding: 14px 38px; }
+
+.dashboard-page .header-icon { height: 42px; }
+
+.dashboard-page .header-title { font-size: 0.88rem; }
 
 /* Divider */
 .divider { border: none; border-top: 1.5px solid #d6c8bb; margin: 48px 0; }
