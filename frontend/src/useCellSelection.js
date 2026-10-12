@@ -33,11 +33,30 @@ export default function useCellSelection({ rows, columns }) {
     const [focus, setFocus] = useState(null);
     // True while the handle is being dragged.
     const dragging = useRef(false);
+    // Where the block was when it was last dismissed, so the keyboard can
+    // pick up from there.
+    const lastCell = useRef(null);
+    // The live focus, readable inside the state updater in clearSelection.
+    const focusRef = useRef(null);
 
+    /**
+     * Dismiss the block, remembering where it was.
+     *
+     * The next arrow press resumes from that cell rather than jumping back
+     * to the top of the table — dismissing a selection by accident should
+     * cost one keystroke to recover, not a scroll back to where you were.
+     */
     const clearSelection = useCallback(() => {
-        setAnchor(null);
+        setAnchor((current) => {
+            if (current) lastCell.current = focusRef.current ?? current;
+            return null;
+        });
         setFocus(null);
     }, []);
+
+    useEffect(() => {
+        focusRef.current = focus;
+    }, [focus]);
 
     /** Every cell in the block between the two corners. */
     const selected = (() => {
@@ -102,16 +121,19 @@ export default function useCellSelection({ rows, columns }) {
      */
     const moveFocus = useCallback(
         (rowStep, columnStep, extend = false) => {
-            // Nothing selected yet: the first arrow press starts at the
-            // top-left cell, so the keyboard alone can get going.
-            const from = focus ?? anchor;
-            if (!from) {
-                if (rows.length === 0 || columns.length === 0) return;
-                const start = { id: rows[0], field: columns[0] };
-                setAnchor(start);
-                setFocus(start);
-                return;
-            }
+            if (rows.length === 0 || columns.length === 0) return;
+
+            // Nothing selected: carry on from where the last block was
+            // dismissed, so the arrow moves rather than only re-selecting
+            // the cell it was left on. The very first press starts at the
+            // top-left, which is the only time there is nowhere to resume.
+            const remembered = lastCell.current;
+            const from =
+                focus ??
+                anchor ??
+                (remembered && rows.includes(remembered.id)
+                    ? remembered
+                    : { id: rows[0], field: columns[0] });
 
             const r = rows.indexOf(from.id);
             const c = columns.indexOf(from.field);

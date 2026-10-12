@@ -137,8 +137,12 @@ export default function TimeStampCell({
                             onCommitAndMove?.();
                         }
                         if (event.key === "Escape") {
+                            // Abandons the draft without writing it; the
+                            // cell stays selected, so Escape again is what
+                            // dismisses the block.
                             setEditing(false);
                             event.target.blur();
+                            event.stopPropagation();
                         }
                     }}
                 />

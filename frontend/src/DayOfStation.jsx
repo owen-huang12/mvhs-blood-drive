@@ -413,13 +413,19 @@ export default function DayOfStation() {
             // field: it is the one key that should always back out. While
             // the confirmation is open it closes that instead, leaving the
             // block intact — cancelling should not also lose the selection.
+            const typing = event.target.closest?.("input, textarea, select");
+
             if (event.key === "Escape") {
                 if (confirmingClear) setConfirmingClear(null);
+                // Backing out of a field leaves the cell selected: the
+                // first Escape abandons what was being typed, a second
+                // dismisses the block. Clearing both at once would make
+                // one keystroke undo two steps of work.
+                else if (typing) event.target.blur();
                 else clearSelection();
                 return;
             }
 
-            const typing = event.target.closest?.("input, textarea, select");
             if (typing) return;
 
             const undoKey = (event.metaKey || event.ctrlKey) && event.key === "z";
