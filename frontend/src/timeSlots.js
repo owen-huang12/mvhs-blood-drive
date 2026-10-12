@@ -69,6 +69,15 @@ export const PERIOD_COLORS = {
 export const SLOT_NOTICE_DEADLINE = "10/14 at 8:00 AM";
 
 /** For the tight pickers, where "1st choice" won't fit beside a slot. */
+/**
+ * Every distinct appointment time, in schedule order.
+ *
+ * A module constant so it is one stable array: the day-of pages pass it to a
+ * hook whose effect depends on it, and a fresh array each render would tear
+ * that effect down every time.
+ */
+export const SLOT_TIMES = [...new Set(TIME_SLOTS.map((slot) => slot.time))];
+
 export const SHORT_CHOICE_LABELS = ["1st", "2nd", "3rd"];
 
 export const CHOICE_LABELS = ["1st choice", "2nd choice", "3rd choice"];

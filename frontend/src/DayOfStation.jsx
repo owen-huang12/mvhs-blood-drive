@@ -5,11 +5,18 @@ import Spinner from "./Spinner.jsx";
 import Modal from "./Modal.jsx";
 import TimeStampCell from "./TimeStampCell.jsx";
 import useLiveSignUps from "./useLiveSignUps.js";
+import useCurrentSlot from "./useCurrentSlot.js";
 import { isStudent, participantOf } from "./participants.js";
-import { colorsForPeriod, parseSlot, slotOrder } from "./timeSlots.js";
+import {
+    SLOT_TIMES,
+    colorsForPeriod,
+    parseSlot,
+    slotOrder,
+} from "./timeSlots.js";
 import { getCurrentCoordinator, setDeferred, stampDayOf } from "./api.js";
 import {
     isVisitComplete,
+    readyToFile,
     skipsCanteen,
     timeOrderError,
     visitDuration,
@@ -31,6 +38,8 @@ const STEPS = [
  */
 export default function DayOfStation() {
     const { signUps, loading, error, setError, applyUpdate } = useLiveSignUps();
+    // Moves on by itself as the drive runs.
+    const currentSlot = useCurrentSlot(SLOT_TIMES);
     const [name, setName] = useState("");
     // The student whose times the desk tried to change after filing.
     // The row an explanation is open for, and which one: "locked" when a
@@ -95,7 +104,10 @@ export default function DayOfStation() {
         if (value) {
             const problem = timeOrderError({ ...row, [field]: value });
             if (problem) {
-                setError(`${row.full_name}: ${problem}`);
+                // A popup, not the banner at the top: the banner sits above a
+                // long table and is easily off screen by the time someone is
+                // stamping a row near the bottom.
+                setExplaining({ row, why: "order", problem });
                 return;
             }
         }
@@ -197,7 +209,29 @@ export default function DayOfStation() {
                                                     key={row.id}
                                                     className={[
                                                         startsPeriod ? "period-start" : "",
-                                                        // Dimmed only once there
+                                                        // The slot being served
+                                                        // now, ringed across the
+                                                        // full width of its rows.
+                                                        // First and last close
+                                                        // the top and bottom.
+                                                        slot.time === currentSlot
+                                                            ? "row-now"
+                                                            : "",
+                                                        slot.time === currentSlot &&
+                                                        startsSlot
+                                                            ? "row-now-first"
+                                                            : "",
+                                                        slot.time === currentSlot &&
+                                                        rows[index + 1]?.time_slot !==
+                                                            row.time_slot
+                                                            ? "row-now-last"
+                                                            : "",
+                                                        // Done donating, now
+                                                        // waiting on the clerk.
+                                                        readyToFile(row, student)
+                                                            ? "row-needs-filing"
+                                                            : "",
+                                                        // Tinted only once there
                                                         // is nothing left to
                                                         // record: a student is
                                                         // filed, an adult has
@@ -402,6 +436,23 @@ export default function DayOfStation() {
                     )}
                 </div>
             </main>
+
+            {explaining?.why === "order" && (
+                <Modal
+                    title="Those times are out of order"
+                    onClose={() => setExplaining(null)}
+                >
+                    <p>
+                        {explaining.row.full_name}: {explaining.problem}
+                    </p>
+                    <p className="modal-note">
+                        A donor arrives, visits the canteen, then leaves, so
+                        the stamps have to run in that order. Nothing was
+                        saved — check the time, or correct the one it clashes
+                        with first.
+                    </p>
+                </Modal>
+            )}
 
             {explaining?.why === "clerk" && (
                 <Modal

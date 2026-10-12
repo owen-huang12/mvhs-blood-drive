@@ -140,16 +140,70 @@ export function timeOrderError(times) {
  */
 export const skipsCanteen = (row) => Boolean(row.deferred);
 
+/** Are this person's times all in? Arrival, the canteen unless they were
+    deferred, and leaving. */
+export const hasAllTimes = (row) =>
+    Boolean(row.time_in && row.time_out && (skipsCanteen(row) || row.time_canteen));
+
 /**
- * Is there nothing left to record for this person?
+ * Is there nothing left to do for this person?
  *
- * Students finish when the clerk files them — that is the last fact anyone
- * writes about the visit. Adults are never filed, so they finish once their
- * times are in: arrival, the canteen unless they were deferred, and leaving.
+ * Adults finish when their times are in — nobody files them. A student has
+ * one more step after that: the clerk marking them off with the school. So a
+ * student with every time stamped is not done, she is *ready* to be filed —
+ * see `readyToFile`, which is what the rows waiting on her are tinted by.
  */
 export function isVisitComplete(row, student) {
     if (student) return Boolean(row.attendance_cleared);
-    return Boolean(
-        row.time_in && row.time_out && (skipsCanteen(row) || row.time_canteen),
-    );
+    return hasAllTimes(row);
+}
+
+/**
+ * A student whose visit is over but who hasn't been filed yet.
+ *
+ * These are the clerk's queue, and the only rows that carry the waiting
+ * tint: a student still mid-visit isn't her work yet, and an adult never is.
+ */
+export const readyToFile = (row, student) =>
+    Boolean(student && !row.attendance_cleared && hasAllTimes(row));
+
+/**
+ * Set to a schedule time ("8:45 AM") to pin the highlight there instead of
+ * following the clock. For demonstrating the day-of pages out of hours.
+ */
+export const PINNED_SLOT_TIME = null;
+
+/** "8:45 AM" -> minutes since midnight, or null if it can't be read. */
+export function slotMinutes(time) {
+    const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec((time ?? "").trim());
+    if (!match) return null;
+    const hour = Number(match[1]) % 12;
+    const afternoon = match[3].toUpperCase() === "PM";
+    return (hour + (afternoon ? 12 : 0)) * 60 + Number(match[2]);
+}
+
+/**
+ * The slot the desk is working through: the latest one that has started.
+ *
+ * Picked by comparing against the schedule rather than by rounding the clock
+ * to a quarter hour, so it lands on a real slot however the times are spaced
+ * — and it holds on the last slot of the day instead of pointing at nothing
+ * once the drive is over.
+ *
+ * Returns "" before the first appointment, when nothing is current yet.
+ *
+ * `times` is the distinct slot times in schedule order, which the tables
+ * already have; `now` is a Date, injectable for testing.
+ */
+export function currentSlotTime(times, now = new Date()) {
+    if (PINNED_SLOT_TIME) return PINNED_SLOT_TIME;
+
+    const minutesNow = now.getHours() * 60 + now.getMinutes();
+    let current = "";
+    for (const time of times) {
+        const at = slotMinutes(time);
+        if (at === null || at > minutesNow) break;
+        current = time;
+    }
+    return current;
 }

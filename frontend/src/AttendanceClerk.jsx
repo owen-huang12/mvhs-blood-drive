@@ -2,12 +2,19 @@ import Header from "./Header.jsx";
 import ProfilePill from "./ProfilePill.jsx";
 import Spinner from "./Spinner.jsx";
 import useLiveSignUps from "./useLiveSignUps.js";
+import useCurrentSlot from "./useCurrentSlot.js";
 import { isStudent, participantOf } from "./participants.js";
-import { colorsForPeriod, parseSlot, slotOrder } from "./timeSlots.js";
+import {
+    SLOT_TIMES,
+    colorsForPeriod,
+    parseSlot,
+    slotOrder,
+} from "./timeSlots.js";
 import {
     formatStamp,
     isVisitComplete,
     needsFiling,
+    readyToFile,
     skipsCanteen,
     visitDuration,
 } from "./dayOf.js";
@@ -26,6 +33,8 @@ import { setAttendance } from "./api.js";
  */
 export default function AttendanceClerk() {
     const { signUps, loading, error, setError, applyUpdate } = useLiveSignUps();
+    // Moves on by itself as the drive runs.
+    const currentSlot = useCurrentSlot(SLOT_TIMES);
 
     const rows = signUps
         .filter((signUp) => signUp.confirmed)
@@ -160,9 +169,27 @@ export default function AttendanceClerk() {
                                                     key={row.id}
                                                     className={[
                                                         startsPeriod ? "period-start" : "",
-                                                        // Arrived but not yet
-                                                        // filed: still work.
-                                                        student && needsFiling(row)
+                                                        // The slot being served
+                                                        // now, ringed across the
+                                                        // full width of its rows.
+                                                        // First and last close
+                                                        // the top and bottom.
+                                                        slot.time === currentSlot
+                                                            ? "row-now"
+                                                            : "",
+                                                        slot.time === currentSlot &&
+                                                        startsSlot
+                                                            ? "row-now-first"
+                                                            : "",
+                                                        slot.time === currentSlot &&
+                                                        rows[index + 1]?.time_slot !==
+                                                            row.time_slot
+                                                            ? "row-now-last"
+                                                            : "",
+                                                        // Done donating but
+                                                        // not yet filed: her
+                                                        // queue.
+                                                        readyToFile(row, student)
                                                             ? "row-needs-filing"
                                                             : "",
                                                         // Done: reads the same

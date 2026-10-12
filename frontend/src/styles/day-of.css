@@ -293,15 +293,18 @@
 /* ── Time picker ───────────────────────────────────────────────────── */
 
 /* Fixed and anchored to the click, same as the capacity panel: it must not
-   scroll away from the cursor or be clipped by the table's overflow. */
+   scroll away from the cursor or be clipped by the table's overflow.
+   Sized and coloured with the rest of the day-of pages: the hairline border
+   the cards use rather than a black outline, and the olive of the filing
+   checkbox for the current selection. */
 .time-panel {
   position: fixed;
   z-index: 70;
-  width: 220px;
+  width: 186px;
   background: #fff;
-  border: 1px solid #1a1a1a;
-  border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  border: 1px solid #e4e0dd;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
@@ -311,82 +314,32 @@
   justify-content: space-between;
   gap: var(--space-sm);
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.8rem;
+  font-size: 0.64rem;
   font-weight: 600;
-  padding: 8px var(--space-md);
+  letter-spacing: 0.03em;
+  color: #6b6b6b;
+  background: #faf9f8;
+  padding: 7px 12px;
   border-bottom: 1px solid #ece9e7;
 }
 
 /* The pending value, so the whole time is legible before it is saved. */
 .time-panel-preview {
+  font-size: 0.72rem;
   font-weight: 400;
-  color: var(--red);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Typed entry. Sits above the columns as the primary way in — the columns
-   are for browsing, this is for anyone who already knows the time. */
-.time-entry {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: var(--space-sm) var(--space-md) 0;
-}
-
-.time-field {
-  width: 44px;
-  padding: 7px 0;
-  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 1rem;
-  text-align: center;
   color: #1a1a1a;
-  background: #faf9f8;
-  border: 1px solid #ddd8d4;
-  border-radius: 8px;
   font-variant-numeric: tabular-nums;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.time-field:focus {
-  outline: none;
-  background: #fff;
-  border-color: var(--red);
-}
-
-.time-entry-colon {
-  font-size: 1rem;
-  color: #8a837d;
-}
-
-.time-meridiem-toggle {
-  margin-left: 4px;
-  padding: 7px 10px;
-  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #5f5a56;
-  background: #fff;
-  border: 1px solid #ddd8d4;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.time-meridiem-toggle:hover {
-  border-color: var(--slate);
-  color: var(--slate);
 }
 
 .time-panel-body {
   display: flex;
   gap: 2px;
-  padding: var(--space-sm);
+  padding: 6px;
 }
 
 .time-column {
   flex: 1;
-  max-height: 168px;
+  max-height: 136px;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -399,13 +352,13 @@
 .time-option {
   display: block;
   width: 100%;
-  padding: 5px 8px;
+  padding: 4px 6px;
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
   color: #5f5a56;
   background: none;
   border: none;
-  border-radius: 7px;
+  border-radius: 6px;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
   transition: background 0.12s ease, color 0.12s ease;
@@ -413,28 +366,31 @@
 
 .time-option:hover { background: #faf9f8; color: #1a1a1a; }
 
+/* The selection, in the olive of the filed checkbox. Dark text on it for
+   the same reason the tick is drawn dark: white on this green sits near
+   1.6:1 and all but disappears. */
 .time-option.selected {
-  background: var(--red);
-  color: #fff;
+  background: #CAD182;
+  color: #3D4219;
   font-weight: 600;
 }
 
 .time-panel-actions {
   display: flex;
-  gap: 6px;
-  padding: var(--space-sm) var(--space-md) var(--space-md);
+  gap: 5px;
+  padding: 8px 10px 10px;
   border-top: 1px solid #ece9e7;
 }
 
 .time-action {
   flex: 1;
-  padding: 6px 8px;
+  padding: 5px 6px;
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.78rem;
+  font-size: 0.64rem;
   color: #5f5a56;
   background: #fff;
   border: 1px solid #ddd8d4;
-  border-radius: 8px;
+  border-radius: 7px;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
@@ -445,14 +401,18 @@
 }
 
 .time-action.primary {
-  background: var(--red);
-  border-color: var(--red);
-  color: #fff;
+  background: #CAD182;
+  border-color: #BBC271;
+  color: #3D4219;
+  font-weight: 600;
 }
 
 .time-action.primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-  color: #fff;
+  /* Deepened rather than brightened: this green is already light, so
+     brightening washes it out and takes the dark label with it. */
+  background: #BBC271;
+  border-color: #AAB163;
+  color: #3D4219;
 }
 
 .time-action:disabled { opacity: 0.5; cursor: default; }
@@ -484,4 +444,97 @@
    to do, whichever order the two classes are written in. */
 .appointment-table tr.row-filed.row-needs-filing td:not(.period-cell) {
   background: #f3ffee;
+}
+
+/* The slot being served right now, ringed so the desk can find its place in
+   a long table at a glance.
+
+   Drawn as overlays on the cells, never as cell borders. Borders came apart
+   wherever the pieces met: each cell paints its own under `border-collapse:
+   separate`, so corners doubled, the column dividers chopped the horizontal
+   runs into segments, and nothing lined up across the time cell's rowspan.
+
+   Overlays avoid all of that — they sit above the cell, cost no layout, and
+   abut exactly because each spans its cell edge to edge. Two pseudo-elements
+   are available per cell, so the horizontal caps use ::before and the
+   vertical edges ::after, and no rule ever needs both on one cell.
+
+   The time cell spans the slot's rows, so it is the only cell present on
+   every row of the block — which makes it the left edge, and means its own
+   caps have to come from the block's first and last row rather than from
+   the rows it visually sits beside. */
+
+/* Every cell in the block can host an overlay. */
+.appointment-table tr.row-now > td { position: relative; }
+
+/* ── Horizontal caps (::before) ──
+   On every cell of the first and last row, so the run is continuous across
+   the full width with no gap at any column divider. */
+.appointment-table tr.row-now-first > td:not(.period-cell)::before,
+.appointment-table tr.row-now-last > td:not(.period-cell)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #F4978E;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.appointment-table tr.row-now-first > td:not(.period-cell)::before { top: 0; }
+
+.appointment-table tr.row-now-last > td:not(.period-cell)::before { bottom: 0; }
+
+/* The table rounds its corners and hides the overflow, which crops the ring
+   where it meets the very last row. Nudged inside so the bottom and right
+   edges land within the rounded box rather than under it. */
+.appointment-table tr:last-child.row-now-last > td:not(.period-cell)::before {
+  bottom: 1px;
+}
+
+.appointment-table tr:last-child.row-now > td:last-child::after {
+  right: 1px;
+}
+
+/* The time cell is in the first row only, yet spans to the bottom of the
+   block, so its lower cap is drawn with a gradient on the same element
+   rather than a second pseudo-element it does not have to spare. */
+.appointment-table tr.row-now-first > .appointment-time::before {
+  top: 0;
+  bottom: 0;
+  height: auto;
+  background:
+    linear-gradient(#F4978E, #F4978E) top left / 100% 2px no-repeat,
+    linear-gradient(#F4978E, #F4978E) bottom left / 100% 2px no-repeat;
+}
+
+/* ── Vertical edges (::after) ──
+   The left edge rides the time cell, which spans the block; the right edge
+   the last column, on every row. */
+.appointment-table tr.row-now > .appointment-time::after,
+.appointment-table tr.row-now > td:last-child::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #F4978E;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.appointment-table tr.row-now > .appointment-time::after { left: 0; }
+
+.appointment-table tr.row-now > td:last-child::after { right: 0; }
+
+/* A drag in progress outranks both. These rules load after the drop
+   highlights in appointment-table.css, so without this a tinted row on the
+   coordinator dashboard would paint over the cue showing where it lands. */
+.appointment-table tr.row-drop td:not(.period-cell) {
+  background: #E8F4FC;
+}
+
+.appointment-table tr.row-drop-blocked td:not(.period-cell) {
+  background: #F6D2CE;
 }
