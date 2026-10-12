@@ -1,10 +1,10 @@
 import { useCallback, useLayoutEffect, useState } from "react";
 import useOverlayMeasure from "./useOverlayMeasure.js";
 
-/* How far apart two rings' top edges can be and still be treated as the
-   same line for stacking. A row is ~30px, so this catches blocks that
-   start on the same row without catching the one below. */
-const SAME_LINE_PX = 8;
+/* How close two blocks' top-right corners have to be before their tags
+   would overlap and need packing side by side. Well under a cell's width,
+   so two people in different columns of one row keep separate tags. */
+const SAME_CORNER_PX = 8;
 
 /* Each ring after the first is inset slightly, so two selections covering
    the same cells show as nested rectangles instead of one hiding the
@@ -30,7 +30,7 @@ const NEST_PX = 2;
  */
 export default function SelectionRing({ scrollRef, selections }) {
     const [boxes, setBoxes] = useState([]);
-    // One row of name tags per group of rings sharing a top edge.
+    // Name tags, grouped by the corner they sit on.
     const [tagRows, setTagRows] = useState([]);
 
     const measure = useCallback(() => {
@@ -73,18 +73,23 @@ export default function SelectionRing({ scrollRef, selections }) {
             })
             .filter(Boolean);
 
-        // Rings whose tops line up would each pin a tag to the same point,
-        // so their tags are collected into one strip instead — laid out as
-        // a row, which packs them edge to edge at whatever width they
-        // actually render, rather than guessing at a fixed one.
+        // Each tag belongs on its own block's top-right corner, so blocks
+        // are grouped by where that corner is — not merely by sharing a
+        // row. Two people selecting different columns of the same row have
+        // corners far apart and get a tag each; only blocks ending at the
+        // same point would collide, and those share one strip so the names
+        // pack together instead of overlapping.
         const groups = new Map();
         for (const box of [...measured].sort(
             (a, b) => a.top - b.top || String(a.id).localeCompare(String(b.id)),
         )) {
-            const line = [...groups.keys()].find(
-                (t) => Math.abs(t - box.top) <= SAME_LINE_PX,
+            const right = box.left + box.width;
+            const corner = [...groups.keys()].find(
+                ([t, r]) =>
+                    Math.abs(t - box.top) <= SAME_CORNER_PX &&
+                    Math.abs(r - right) <= SAME_CORNER_PX,
             );
-            const key = line ?? box.top;
+            const key = corner ?? [box.top, right];
             const peers = groups.get(key) ?? [];
             // Nested, so a ring directly under another is still visible.
             box.nest = peers.length * NEST_PX;
@@ -95,12 +100,11 @@ export default function SelectionRing({ scrollRef, selections }) {
         // The viewer's own goes last, which paints it above the others.
         measured.sort((a, b) => Number(Boolean(a.isSelf)) - Number(Boolean(b.isSelf)));
         setBoxes(measured);
-        // One strip per line, anchored to the rightmost ring sharing it.
         setTagRows(
-            [...groups.values()].map((peers) => ({
+            [...groups.entries()].map(([[top, right], peers]) => ({
                 key: peers.map((p) => p.id).join("|"),
-                top: Math.min(...peers.map((p) => p.top)),
-                right: Math.max(...peers.map((p) => p.left + p.width)),
+                top,
+                right,
                 tags: peers
                     .filter((p) => p.label)
                     .map((p) => ({ id: p.id, label: p.label, color: p.color })),
