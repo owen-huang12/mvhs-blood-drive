@@ -65,7 +65,9 @@
 .pending-header,
 .pending-row {
   display: grid;
-  grid-template-columns: 1fr 88px 88px 88px 152px 96px;
+  /* The time-slot column fits the longest label on the schedule
+     ("Period 2/Tutorial: 10:00 AM") without clipping it. */
+  grid-template-columns: 1fr 88px 88px 88px 190px 96px;
   align-items: stretch;
 }
 
@@ -122,7 +124,9 @@
 .pending-row .pending-meta {
   display: flex;
   align-items: center;
-  padding: 7px 13px;
+  /* Matches .appointment-table td, so a pending row and a booked one are
+     the same height and the two tables read as one list. */
+  padding: 9px 13px;
 }
 
 /* The time-slot cell has no padding of its own — SlotPicker's trigger

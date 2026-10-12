@@ -12,9 +12,11 @@
   align-items: center;
   justify-content: center;
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.8rem;
+  /* Inherited, so it matches whatever row it sits in rather than being
+     a size larger than the text beside it. */
+  font-size: inherit;
   font-weight: 400;
-  padding: 0 16px;
+  padding: 0 10px;
   border-radius: 0;
   cursor: pointer;
   border: 1px solid transparent;
