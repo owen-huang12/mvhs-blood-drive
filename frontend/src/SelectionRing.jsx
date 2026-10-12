@@ -6,10 +6,6 @@ import useOverlayMeasure from "./useOverlayMeasure.js";
    start on the same row without catching the one below. */
 const SAME_LINE_PX = 8;
 
-/* A tag's own width is only known once it renders, so the stack is laid
-   out from an estimate: enough for "Charlotte H." at 0.58rem, plus gap. */
-const TAG_WIDTH_PX = 78;
-
 /* Each ring after the first is inset slightly, so two selections covering
    the same cells show as nested rectangles instead of one hiding the
    other entirely. */
@@ -34,11 +30,14 @@ const NEST_PX = 2;
  */
 export default function SelectionRing({ scrollRef, selections }) {
     const [boxes, setBoxes] = useState([]);
+    // One row of name tags per group of rings sharing a top edge.
+    const [tagRows, setTagRows] = useState([]);
 
     const measure = useCallback(() => {
         const scroll = scrollRef.current;
         if (!scroll) {
             setBoxes([]);
+            setTagRows([]);
             return;
         }
 
@@ -74,29 +73,39 @@ export default function SelectionRing({ scrollRef, selections }) {
             })
             .filter(Boolean);
 
-        // Tags are pinned to each ring's top-right corner, so rings whose
-        // tops line up would stack their tags on the same spot. Shift each
-        // one left of the last, in a stable order so they do not swap
-        // places as other people's selections come and go.
-        const byLine = new Map();
+        // Rings whose tops line up would each pin a tag to the same point,
+        // so their tags are collected into one strip instead — laid out as
+        // a row, which packs them edge to edge at whatever width they
+        // actually render, rather than guessing at a fixed one.
+        const groups = new Map();
         for (const box of [...measured].sort(
             (a, b) => a.top - b.top || String(a.id).localeCompare(String(b.id)),
         )) {
-            const line = [...byLine.keys()].find(
+            const line = [...groups.keys()].find(
                 (t) => Math.abs(t - box.top) <= SAME_LINE_PX,
             );
             const key = line ?? box.top;
-            const peers = byLine.get(key) ?? [];
-            box.tagOffset = peers.length * TAG_WIDTH_PX;
+            const peers = groups.get(key) ?? [];
             // Nested, so a ring directly under another is still visible.
             box.nest = peers.length * NEST_PX;
             peers.push(box);
-            byLine.set(key, peers);
+            groups.set(key, peers);
         }
 
         // The viewer's own goes last, which paints it above the others.
         measured.sort((a, b) => Number(Boolean(a.isSelf)) - Number(Boolean(b.isSelf)));
         setBoxes(measured);
+        // One strip per line, anchored to the rightmost ring sharing it.
+        setTagRows(
+            [...groups.values()].map((peers) => ({
+                key: peers.map((p) => p.id).join("|"),
+                top: Math.min(...peers.map((p) => p.top)),
+                right: Math.max(...peers.map((p) => p.left + p.width)),
+                tags: peers
+                    .filter((p) => p.label)
+                    .map((p) => ({ id: p.id, label: p.label, color: p.color })),
+            })),
+        );
     }, [scrollRef, selections]);
 
     // Measured before paint, so a ring never lags its cells by a frame.
@@ -106,26 +115,42 @@ export default function SelectionRing({ scrollRef, selections }) {
 
     useOverlayMeasure(scrollRef, measure);
 
-    return boxes.map((box) => (
-        <div
-            key={box.id}
-            className={`selection-ring${box.isSelf ? " is-self" : ""}`}
-            style={{
-                top: `${box.top - box.nest}px`,
-                left: `${box.left - box.nest}px`,
-                width: `${box.width + box.nest * 2}px`,
-                height: `${box.height + box.nest * 2}px`,
-                "--marker": box.color,
-            }}
-        >
-            {box.label && (
-                <span
-                    className="selection-ring-tag"
-                    style={{ right: `${box.tagOffset}px` }}
+    return (
+        <>
+            {boxes.map((box) => (
+                <div
+                    key={box.id}
+                    className={`selection-ring${box.isSelf ? " is-self" : ""}`}
+                    style={{
+                        top: `${box.top - box.nest}px`,
+                        left: `${box.left - box.nest}px`,
+                        width: `${box.width + box.nest * 2}px`,
+                        height: `${box.height + box.nest * 2}px`,
+                        "--marker": box.color,
+                    }}
+                />
+            ))}
+
+            {/* Names sit above the line their rings share, in one run with
+                no gaps: a second person joining a block adds a tag to the
+                left of the first rather than overlapping it. */}
+            {tagRows.map((row) => (
+                <div
+                    key={row.key}
+                    className="selection-tags"
+                    style={{ top: `${row.top}px`, left: `${row.right}px` }}
                 >
-                    {box.label}
-                </span>
-            )}
-        </div>
-    ));
+                    {row.tags.map((tag) => (
+                        <span
+                            key={tag.id}
+                            className="selection-ring-tag"
+                            style={{ "--marker": tag.color }}
+                        >
+                            {tag.label}
+                        </span>
+                    ))}
+                </div>
+            ))}
+        </>
+    );
 }

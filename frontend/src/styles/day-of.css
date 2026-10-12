@@ -566,13 +566,21 @@
 
 .selection-ring.is-self { z-index: 4; }
 
-/* Whose selection it is, on the outline's top-right corner — the same tab
-   the current-slot ring carries. `right` is set inline: tags on rings that
-   share a top edge are shifted along so they sit in a row rather than on
-   top of each other. */
-.selection-ring-tag {
+/* The names above a block, as one run. Anchored to the right edge of the
+   rings sharing that line and laid out right to left, so a second person
+   joining adds a tag to the left of the first — packed edge to edge at
+   whatever width each name actually takes. */
+.selection-tags {
   position: absolute;
-  bottom: 100%;
+  display: flex;
+  flex-direction: row-reverse;
+  /* The anchor is the block's right edge, and the row grows left from it. */
+  transform: translate(-100%, -100%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.selection-ring-tag {
   padding: 2px 6px;
   /* The table's own face: the tag sits outside the table, so without this
      it falls back to the page's serif and reads as a different thing. */
