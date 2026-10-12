@@ -23,7 +23,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 import bcrypt
-from pydantic import AfterValidator, BaseModel, EmailStr, Field, StringConstraints, field_validator
+from pydantic import (
+    AfterValidator, BaseModel, EmailStr, Field, StringConstraints,
+    field_validator, model_validator,
+)
 import psycopg2
 import psycopg2.errors
 import psycopg2.pool
@@ -531,6 +534,9 @@ NO_AGE = 0
 
 GRADES = ("9th", "10th", "11th", "12th")
 
+# Red Cross minimum for a school drive.
+MIN_SIGN_UP_AGE = 16
+
 # "How did you hear about the drive?" Mirrored by HOW_HEAR_OPTIONS in
 # frontend/src/HowHearField.jsx.
 HOW_HEAR_OPTIONS = (
@@ -702,6 +708,58 @@ class StudentSignUp(BaseModel):
         if value not in GRADES:
             raise ValueError("is required")
         return value
+
+
+class WalkIn(BaseModel):
+    """Someone who turned up without booking, entered at the desk.
+
+    The same details the online form collects, minus the three time choices:
+    a walk-in is given the slot being served, so there is nothing to choose.
+    The student-only fields are optional here and validated by participant
+    type below, since one form serves all three kinds of donor.
+    """
+    full_name: Name
+    preferred_name: PreferredName = None
+    email_address: SignUpEmail
+    participant_type: str
+    time_slot: str
+    # Students only; checked in `_student_fields_present`.
+    student_id: _text(10) | None = None
+    age: int | None = None
+    grade: str | None = None
+
+    @field_validator("participant_type")
+    @classmethod
+    def _known_type(cls, value: str) -> str:
+        if value not in PARTICIPANT_TYPES:
+            raise ValueError(f"participant_type must be one of {PARTICIPANT_TYPES}")
+        return value
+
+    @model_validator(mode="after")
+    def _student_fields_present(self):
+        """A student needs an ID, an age and a grade; an adult has none of
+        the three, so they are cleared rather than stored as typed."""
+        if self.participant_type == "student":
+            missing = [
+                name
+                for name, value in (
+                    ("student_id", self.student_id),
+                    ("age", self.age),
+                    ("grade", self.grade),
+                )
+                if value in (None, "")
+            ]
+            if missing:
+                raise ValueError(f"students must give {', '.join(missing)}")
+            if self.grade not in GRADES:
+                raise ValueError(f"grade must be one of {GRADES}")
+            if self.age < MIN_SIGN_UP_AGE:
+                raise ValueError(f"must be at least {MIN_SIGN_UP_AGE} years old")
+        else:
+            self.student_id = None
+            self.age = None
+            self.grade = None
+        return self
 
 
 class AdultSignUp(BaseModel):
@@ -1072,7 +1130,6 @@ def reset_password(body: ResetPassword):
     return {"message": "Your password has been reset."}
 
 
-MIN_SIGN_UP_AGE = 16
 
 
 def _insert_sign_up(
@@ -1090,6 +1147,7 @@ def _insert_sign_up(
     how_hear: str | None = None,
     agreement_signature: str | None = None,
     choice_classes: tuple[str | None, str | None, str | None] = (None, None, None),
+    confirmed: bool = False,
 ) -> SignUpRow:
     """Store one sign-up of any participant type, rejecting duplicates.
 
@@ -1159,7 +1217,7 @@ def _insert_sign_up(
                     str.title(full_name), preferred_name or None,
                     participant_type == "student",
                     participant_type, student_id, age, datetime.now(timezone.utc),
-                    email_address, grade, False,
+                    email_address, grade, confirmed,
                     # time_slot is seeded with the first choice rather than left
                     # blank; the row is unconfirmed, so the dashboard ignores it
                     # until a coordinator assigns one. Kept as-is to match the

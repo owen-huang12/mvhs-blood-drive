@@ -3,9 +3,7 @@ import CapacityPicker from "./CapacityPicker.jsx";
 import PreferredSlotMenu from "./PreferredSlotMenu.jsx";
 import { isStudent, participantOf } from "./participants.js";
 import { isVisitComplete, readyToFile } from "./dayOf.js";
-import useCurrentSlot from "./useCurrentSlot.js";
 import {
-    SLOT_TIMES,
     buildSchedule,
     colorsForPeriod,
     countOpenSlots,
@@ -23,8 +21,6 @@ export default function AppointmentTable({
     onCapacityChange,
     busyId,
 }) {
-    // Moves on by itself as the drive runs.
-    const currentSlot = useCurrentSlot(SLOT_TIMES);
     const [draggingId, setDraggingId] = useState(null);
     const [dropSlot, setDropSlot] = useState(null);
     // The period whose capacity panel is open, plus where to anchor it.
@@ -151,16 +147,7 @@ export default function AppointmentTable({
                                         className={[
                                             index === 0 ? "period-start" : "",
                                             booked ? "" : "slot-open",
-                                            // The slot being served now, ringed
-                                            // across the full width of its rows.
-                                            row.time === currentSlot ? "row-now" : "",
-                                            row.time === currentSlot && startsSlot
-                                                ? "row-now-first"
-                                                : "",
-                                            row.time === currentSlot &&
-                                            group.rows[index + 1]?.key !== row.key
-                                                ? "row-now-last"
-                                                : "",
+
                                             // Done donating, waiting on the
                                             // clerk — her outstanding work.
                                             booked &&
