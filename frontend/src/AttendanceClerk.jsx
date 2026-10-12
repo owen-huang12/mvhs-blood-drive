@@ -1,6 +1,8 @@
+import { useRef } from "react";
 import Header from "./Header.jsx";
 import ProfilePill from "./ProfilePill.jsx";
 import Spinner from "./Spinner.jsx";
+import SlotRing from "./SlotRing.jsx";
 import useLiveSignUps from "./useLiveSignUps.js";
 import useCurrentSlot from "./useCurrentSlot.js";
 import { isStudent, participantOf } from "./participants.js";
@@ -11,6 +13,7 @@ import {
     slotOrder,
 } from "./timeSlots.js";
 import {
+    classForSlot,
     formatStamp,
     isVisitComplete,
     needsFiling,
@@ -35,6 +38,8 @@ export default function AttendanceClerk() {
     const { signUps, loading, error, setError, applyUpdate } = useLiveSignUps();
     // Moves on by itself as the drive runs.
     const currentSlot = useCurrentSlot(SLOT_TIMES);
+    // The box the ring is measured against and drawn inside.
+    const tableRef = useRef(null);
 
     const rows = signUps
         .filter((signUp) => signUp.confirmed)
@@ -100,14 +105,14 @@ export default function AttendanceClerk() {
                                 </span>
                             </h3>
 
-                            <div className="table-scroll">
+                            <div className="table-scroll" ref={tableRef}>
                                 <table className="appointment-table day-of-table attendance-table">
                                     <thead>
                                         <tr>
                                             <th>Period</th>
                                             <th>App. Time</th>
                                             <th>Full Name</th>
-                                            <th>Email</th>
+                                            <th>Class missed</th>
                                             <th className="status-cell">Status</th>
                                             <th>Grade</th>
                                             <th>Student ID</th>
@@ -167,25 +172,16 @@ export default function AttendanceClerk() {
                                             return (
                                                 <tr
                                                     key={row.id}
+                                                    // Found by SlotRing, which
+                                                    // measures these rows to
+                                                    // size its overlay.
+                                                    data-slot-now={
+                                                        slot.time === currentSlot
+                                                            ? ""
+                                                            : undefined
+                                                    }
                                                     className={[
                                                         startsPeriod ? "period-start" : "",
-                                                        // The slot being served
-                                                        // now, ringed across the
-                                                        // full width of its rows.
-                                                        // First and last close
-                                                        // the top and bottom.
-                                                        slot.time === currentSlot
-                                                            ? "row-now"
-                                                            : "",
-                                                        slot.time === currentSlot &&
-                                                        startsSlot
-                                                            ? "row-now-first"
-                                                            : "",
-                                                        slot.time === currentSlot &&
-                                                        rows[index + 1]?.time_slot !==
-                                                            row.time_slot
-                                                            ? "row-now-last"
-                                                            : "",
                                                         // Done donating but
                                                         // not yet filed: her
                                                         // queue.
@@ -232,15 +228,13 @@ export default function AttendanceClerk() {
                                                     <td className="name-cell">
                                                         {row.full_name}
                                                     </td>
-                                                    {/* Titled because it is
-                                                        capped: a long address
-                                                        is still readable on
-                                                        hover. */}
-                                                    <td
-                                                        className="appointment-email"
-                                                        title={row.email_address}
-                                                    >
-                                                        {row.email_address}
+                                                    <td className="class-cell">
+                                                        {classForSlot(row) || (
+                                                            <span
+                                                                className="not-applicable"
+                                                                title="Not applicable"
+                                                            />
+                                                        )}
                                                     </td>
                                                     <td
                                                         className="status-cell"
@@ -327,6 +321,15 @@ export default function AttendanceClerk() {
                                         })}
                                     </tbody>
                                 </table>
+
+                                {/* Drawn over the table, not out of cell
+                                    borders — see SlotRing. */}
+                                <SlotRing
+                                    scrollRef={tableRef}
+                                    rowSelector="tr[data-slot-now]"
+                                    startSelector=".appointment-time"
+                                    deps={[currentSlot, rows]}
+                                />
                             </div>
                         </section>
                     )}

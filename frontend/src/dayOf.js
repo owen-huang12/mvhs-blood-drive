@@ -207,3 +207,40 @@ export function currentSlotTime(times, now = new Date()) {
     }
     return current;
 }
+
+/**
+ * The class this person is missing for the time they were given.
+ *
+ * Stored per choice rather than per person, so the one to show is whichever
+ * choice matches their assigned slot. A coordinator can move someone to a
+ * time they never picked, in which case there is nothing recorded for it —
+ * and adults are never asked, so they have none at all.
+ */
+/**
+ * A stored class as the day-of tables show it.
+ *
+ * The database holds what the backend wrote at sign-up — "Marie Clarke,
+ * Rm 301" — and existing rows keep that wording. This is presentation only:
+ * the comma becomes a divider and "Rm" is spelled out, which reads better in
+ * a column of its own than it did inside an email sentence.
+ *
+ * Anything that doesn't match the stored shape is passed through untouched,
+ * so a value written by hand or by some later format still displays.
+ */
+const STORED_CLASS = /^(.*), Rm (.*)$/;
+
+export function formatClass(value) {
+    const match = STORED_CLASS.exec(value ?? "");
+    return match ? `${match[1]} | Room ${match[2]}` : (value ?? "");
+}
+
+export function classForSlot(row) {
+    const classes = [
+        row.first_choice_class,
+        row.second_choice_class,
+        row.third_choice_class,
+    ];
+    const index = [row.first_choice, row.second_choice, row.third_choice]
+        .indexOf(row.time_slot);
+    return formatClass((index === -1 ? null : classes[index]) || "");
+}

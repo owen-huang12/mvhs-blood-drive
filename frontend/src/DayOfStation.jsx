@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Header from "./Header.jsx";
 import ProfilePill from "./ProfilePill.jsx";
-import WalkInForm from "./WalkInForm.jsx";
 import Spinner from "./Spinner.jsx";
+import SlotRing from "./SlotRing.jsx";
+import PendingSignUps from "./PendingSignUps.jsx";
 import Modal from "./Modal.jsx";
 import TimeStampCell from "./TimeStampCell.jsx";
 import useLiveSignUps from "./useLiveSignUps.js";
@@ -11,11 +12,21 @@ import { isStudent, participantOf } from "./participants.js";
 import {
     SLOT_TIMES,
     colorsForPeriod,
+    firstOpenSlot,
+    isSlotFull,
     parseSlot,
     slotOrder,
 } from "./timeSlots.js";
-import { getCurrentCoordinator, setDeferred, stampDayOf } from "./api.js";
 import {
+    confirmSignUp,
+    getCurrentCoordinator,
+    listSlotCapacity,
+    moveSignUp,
+    setDeferred,
+    stampDayOf,
+} from "./api.js";
+import {
+    classForSlot,
     isVisitComplete,
     readyToFile,
     skipsCanteen,
@@ -42,7 +53,12 @@ export default function DayOfStation() {
         useLiveSignUps();
     // Moves on by itself as the drive runs.
     const currentSlot = useCurrentSlot(SLOT_TIMES);
+    // The box the ring is measured against and drawn inside.
+    const tableRef = useRef(null);
     const [name, setName] = useState("");
+    // Positions per slot, for the pending list's picker. Empty reads as
+    // "every slot at its base capacity", which is right until it loads.
+    const [capacity, setCapacity] = useState({});
     // The student whose times the desk tried to change after filing.
     // The row an explanation is open for, and which one: "locked" when a
     // filed record blocks an edit, "clerk" when the desk clicks the column
@@ -56,10 +72,62 @@ export default function DayOfStation() {
         getCurrentCoordinator()
             .then((me) => !cancelled && setName(me.full_name))
             .catch(() => {});
+        // A failure here leaves every slot at base capacity, which is the
+        // right fallback for an unedited drive.
+        listSlotCapacity()
+            .then((rows) => {
+                if (cancelled) return;
+                setCapacity(
+                    Object.fromEntries(
+                        rows.map((row) => [row.time_slot, row.capacity]),
+                    ),
+                );
+            })
+            .catch(() => {});
         return () => {
             cancelled = true;
         };
     }, []);
+
+    /**
+     * Give a pending sign-up one of the times they asked for.
+     *
+     * Someone who turns up late fills out the public form at the desk, so
+     * they arrive here unconfirmed; seating them without leaving the page
+     * is the difference between a queue and a scramble.
+     */
+    const handleConfirm = async (id, timeSlot) => {
+        try {
+            const updated = await confirmSignUp(id, timeSlot);
+            setError("");
+            return updated;
+        } catch (err) {
+            setError(
+                err.status === 409
+                    ? err.message
+                    : "Could not confirm that sign-up. Please try again.",
+            );
+            throw err;
+        }
+    };
+
+    /** Any other time: the strict confirm route refuses one not chosen. */
+    const handleOverride = async (id, timeSlot) => {
+        try {
+            const updated = await moveSignUp(id, timeSlot);
+            setError("");
+            return updated;
+        } catch (err) {
+            setError(
+                err.status === 409
+                    ? err.message
+                    : "Could not confirm that sign-up. Please try again.",
+            );
+            throw err;
+        }
+    };
+
+    const pending = signUps.filter((signUp) => !signUp.confirmed);
 
     const rows = signUps
         .filter((signUp) => signUp.confirmed)
@@ -131,16 +199,27 @@ export default function DayOfStation() {
                 <div className="dashboard-body">
                     {error && <p className="login-error">{error}</p>}
 
-                    {/* Above the table: a walk-in is entered before they
-                        can be stamped in. */}
-                    <WalkInForm
-                        currentSlot={currentSlot}
-                        onAdded={addRow}
-                    />
-
                     {loading ? (
                         <Spinner label="Loading appointments…" />
                     ) : (
+                      <>
+                        {/* Above the day's appointments: someone who turns
+                            up late fills out the public form at the desk and
+                            lands here, waiting for a time. Confirming them
+                            drops them straight into the table below.
+
+                            Always shown, empty state and all, so the desk
+                            can see at a glance that nobody is waiting rather
+                            than wondering whether the section is missing. */}
+                        <PendingSignUps
+                            signUps={pending}
+                            onConfirm={handleConfirm}
+                            onOverride={handleOverride}
+                            onCommit={addRow}
+                            isSlotFull={(key) => isSlotFull(rows, key, capacity)}
+                            earliestOpen={firstOpenSlot(rows, capacity)}
+                        />
+
                         <section className="dash-section">
                             <h3 className="dash-heading">
                                 Today's Appointments:
@@ -152,14 +231,14 @@ export default function DayOfStation() {
                                 </span>
                             </h3>
 
-                            <div className="table-scroll">
+                            <div className="table-scroll" ref={tableRef}>
                                 <table className="appointment-table day-of-table attendance-table">
                                     <thead>
                                         <tr>
                                             <th>Period</th>
                                             <th>App. Time</th>
                                             <th>Full Name</th>
-                                            <th>Email</th>
+                                            <th>Class missed</th>
                                             <th className="status-cell">Status</th>
                                             <th>Grade</th>
                                             <th>Student ID</th>
@@ -216,25 +295,16 @@ export default function DayOfStation() {
                                             return (
                                                 <tr
                                                     key={row.id}
+                                                    // Found by SlotRing, which
+                                                    // measures these rows to
+                                                    // size its overlay.
+                                                    data-slot-now={
+                                                        slot.time === currentSlot
+                                                            ? ""
+                                                            : undefined
+                                                    }
                                                     className={[
                                                         startsPeriod ? "period-start" : "",
-                                                        // The slot being served
-                                                        // now, ringed across the
-                                                        // full width of its rows.
-                                                        // First and last close
-                                                        // the top and bottom.
-                                                        slot.time === currentSlot
-                                                            ? "row-now"
-                                                            : "",
-                                                        slot.time === currentSlot &&
-                                                        startsSlot
-                                                            ? "row-now-first"
-                                                            : "",
-                                                        slot.time === currentSlot &&
-                                                        rows[index + 1]?.time_slot !==
-                                                            row.time_slot
-                                                            ? "row-now-last"
-                                                            : "",
                                                         // Done donating, now
                                                         // waiting on the clerk.
                                                         readyToFile(row, student)
@@ -284,11 +354,13 @@ export default function DayOfStation() {
                                                     <td className="name-cell">
                                                         {row.full_name}
                                                     </td>
-                                                    <td
-                                                        className="appointment-email"
-                                                        title={row.email_address}
-                                                    >
-                                                        {row.email_address}
+                                                    <td className="class-cell">
+                                                        {classForSlot(row) || (
+                                                            <span
+                                                                className="not-applicable"
+                                                                title="Not applicable"
+                                                            />
+                                                        )}
                                                     </td>
                                                     <td
                                                         className="status-cell"
@@ -440,8 +512,18 @@ export default function DayOfStation() {
                                         })}
                                     </tbody>
                                 </table>
+
+                                {/* Drawn over the table, not out of cell
+                                    borders — see SlotRing. */}
+                                <SlotRing
+                                    scrollRef={tableRef}
+                                    rowSelector="tr[data-slot-now]"
+                                    startSelector=".appointment-time"
+                                    deps={[currentSlot, rows]}
+                                />
                             </div>
                         </section>
+                      </>
                     )}
                 </div>
             </main>

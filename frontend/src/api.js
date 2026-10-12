@@ -192,10 +192,6 @@ export const setDeferred = (id, deferred) =>
         body: { deferred },
     });
 
-/** Add someone who turned up without booking, from the check-in desk. */
-export const addWalkIn = (walkIn) =>
-    request("/walk-in", { method: "POST", auth: true, body: walkIn });
-
 export const setAttendance = (id, attendanceCleared) =>
     request(`/sign-ups/${id}/attendance`, {
         method: "PATCH",

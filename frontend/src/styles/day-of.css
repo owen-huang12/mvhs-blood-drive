@@ -24,10 +24,17 @@
   padding-right: 6px;
 }
 
-/* Every column the desk writes to — the three times, then deferred and
-   filed — is ruled off from its neighbours, so each is its own box to fill
-   rather than a run of marks. Lighter than the period rules, which separate
-   groups rather than fields. */
+/* Every column is ruled off from its neighbours, so each reads as its own
+   box rather than a run of marks across the row. Lighter than the period
+   rules, which separate groups rather than fields.
+
+   The period and time cells are left out: they span several rows each, so a
+   left border on them would be a line of a different height from the rest
+   and the ring already closes that end of the table. */
+.day-of-table .class-cell,
+.day-of-table .status-cell,
+.day-of-table .grade-cell,
+.day-of-table .id-cell,
 .day-of-table .stamp-cell,
 .day-of-table .deferred-cell,
 .day-of-table .attendance-cell {
@@ -95,19 +102,21 @@
 /* The name is what she scans for, so it gets the slack and is never allowed
    to wrap onto a second line — one wrapped name sets the height of its whole
    row, and at this size there is room for all of them. */
-.attendance-table .name-cell {
-  width: 100%;
-  white-space: nowrap;
-}
-
-/* Email is reference, not something scanned, so it is capped rather than
-   given the slack: a long address truncates instead of pushing the name
-   into a wrap. The cap fits the common mvla.net addresses in full. */
-.attendance-table .appointment-email {
-  max-width: 190px;
+/* The two columns with no natural width. Every other column is sized to its
+   content, so these take the slack between them and grow as the window
+   does. Both truncate rather than wrap: one wrapped cell sets the height of
+   its whole row, and these tables are read by scanning down a column. */
+.attendance-table .name-cell,
+.attendance-table .class-cell {
+  width: 50%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The class they are missing, as the confirmation email states it
+   ("Marie Clarke, Rm 301"). */
+.attendance-table .class-cell {
   font-size: 0.68rem;
   color: #5f5a56;
 }
@@ -118,13 +127,12 @@
    value or dragged into a copied selection. */
 .attendance-table .not-applicable {
   display: block;
-  /* Inset from the cell's edges: the rule says "nothing here", and it reads
-     as that more clearly with air around it than stretched edge to edge. */
-  width: 60%;
-  /* Centred on the text line, so it sits where a value would, and centred
-     across the cell. */
+  /* The width of whatever cell it is in, so it grows with the column rather
+     than sitting as a fixed stub in the middle of a wide one. */
+  width: 100%;
+  /* Centred on the text line, so it sits where a value would. */
   height: 0;
-  margin: 0.55em auto;
+  margin: 0.55em 0;
   border-top: 1px dashed #9a938d;
 }
 
@@ -451,84 +459,61 @@
 /* The slot being served right now, ringed so the desk can find its place in
    a long table at a glance.
 
-   Drawn as overlays on the cells, never as cell borders. Borders came apart
-   wherever the pieces met: each cell paints its own under `border-collapse:
-   separate`, so corners doubled, the column dividers chopped the horizontal
-   runs into segments, and nothing lined up across the time cell's rowspan.
+   One box drawn over the table rather than borders on the cells. Cell
+   borders came apart wherever the pieces met: each cell paints its own
+   under `border-collapse: separate`, so corners doubled, the column
+   dividers chopped the horizontal runs into segments, and the table's
+   rounded `overflow: hidden` clipped whatever reached the last row.
 
-   Overlays avoid all of that — they sit above the cell, cost no layout, and
-   abut exactly because each spans its cell edge to edge. Two pseudo-elements
-   are available per cell, so the horizontal caps use ::before and the
-   vertical edges ::after, and no rule ever needs both on one cell.
+   SlotRing measures the slot's rows and positions this against the
+   scrolling box, so it is a single rectangle at one width the whole way
+   round, and no cell is touched at all. */
+/* Only the day-of tables: the coordinator dashboard shares this class and
+   has no ring, and a positioned ancestor there is a change for nothing. */
+.table-scroll:has(.day-of-table) { position: relative; }
 
-   The time cell spans the slot's rows, so it is the only cell present on
-   every row of the block — which makes it the left edge, and means its own
-   caps have to come from the block's first and last row rather than from
-   the rows it visually sits beside. */
-
-/* Every cell in the block can host an overlay. */
-.appointment-table tr.row-now > td { position: relative; }
-
-/* ── Horizontal caps (::before) ──
-   On every cell of the first and last row, so the run is continuous across
-   the full width with no gap at any column divider. */
-.appointment-table tr.row-now-first > td:not(.period-cell)::before,
-.appointment-table tr.row-now-last > td:not(.period-cell)::before {
-  content: "";
+/* 1px, dashed at a length of our own choosing: a plain `dashed` border
+   leaves the dash length to the browser, which at 1px draws them longer
+   than this. Four gradients instead, one per edge, each repeating a 4px
+   cycle that is 0.65 ink and the rest blank. Painted as backgrounds rather
+   than a border, so the box takes no space and nothing shifts under it. */
+.slot-ring {
   position: absolute;
-  left: 0;
+  background-image:
+    repeating-linear-gradient(to right, #F4978E 0 2.6px, transparent 2.6px 4px),
+    repeating-linear-gradient(to right, #F4978E 0 2.6px, transparent 2.6px 4px),
+    repeating-linear-gradient(to bottom, #F4978E 0 2.6px, transparent 2.6px 4px),
+    repeating-linear-gradient(to bottom, #F4978E 0 2.6px, transparent 2.6px 4px);
+  background-size: 100% 1px, 100% 1px, 1px 100%, 1px 100%;
+  background-position: top left, bottom left, top left, top right;
+  background-repeat: no-repeat;
+  /* Above the rows, below nothing that is interactive. */
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Names the outline, sitting on its top-right corner. Solid where the ring
+   is dashed, so it reads as a label on the line rather than part of it.
+
+   Sits above the line, outside the ring — its bottom edge resting on the
+   dashed top border rather than hanging inside the slot. */
+.slot-ring-tag {
+  position: absolute;
+  bottom: 100%;
   right: 0;
-  height: 2px;
+  /* Shallow on purpose: it sits in the row above the slot, so every pixel
+     of height is one it takes from that row's own contents. */
+  padding: 0 6px 1px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  color: #fff;
   background: #F4978E;
+  /* Rounded on top, square where it meets the line it rests on. */
+  border-radius: 3px 3px 0 0;
   pointer-events: none;
-  z-index: 2;
 }
-
-.appointment-table tr.row-now-first > td:not(.period-cell)::before { top: 0; }
-
-.appointment-table tr.row-now-last > td:not(.period-cell)::before { bottom: 0; }
-
-/* The table rounds its corners and hides the overflow, which crops the ring
-   where it meets the very last row. Nudged inside so the bottom and right
-   edges land within the rounded box rather than under it. */
-.appointment-table tr:last-child.row-now-last > td:not(.period-cell)::before {
-  bottom: 1px;
-}
-
-.appointment-table tr:last-child.row-now > td:last-child::after {
-  right: 1px;
-}
-
-/* The time cell is in the first row only, yet spans to the bottom of the
-   block, so its lower cap is drawn with a gradient on the same element
-   rather than a second pseudo-element it does not have to spare. */
-.appointment-table tr.row-now-first > .appointment-time::before {
-  top: 0;
-  bottom: 0;
-  height: auto;
-  background:
-    linear-gradient(#F4978E, #F4978E) top left / 100% 2px no-repeat,
-    linear-gradient(#F4978E, #F4978E) bottom left / 100% 2px no-repeat;
-}
-
-/* ── Vertical edges (::after) ──
-   The left edge rides the time cell, which spans the block; the right edge
-   the last column, on every row. */
-.appointment-table tr.row-now > .appointment-time::after,
-.appointment-table tr.row-now > td:last-child::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #F4978E;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.appointment-table tr.row-now > .appointment-time::after { left: 0; }
-
-.appointment-table tr.row-now > td:last-child::after { right: 0; }
 
 /* A drag in progress outranks both. These rules load after the drop
    highlights in appointment-table.css, so without this a tinted row on the
@@ -539,126 +524,4 @@
 
 .appointment-table tr.row-drop-blocked td:not(.period-cell) {
   background: #F6D2CE;
-}
-
-/* ── Walk-in form ──────────────────────────────────────────────────── */
-
-/* Collapsed by default: the table is the page, and a walk-in is the
-   exception rather than the routine. */
-.walk-in-bar { margin-bottom: var(--space-md); }
-
-.walk-in-open {
-  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.68rem;
-  padding: 6px 14px;
-  color: #5f5a56;
-  background: #fff;
-  border: 1px solid #ded9d5;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.walk-in-open:hover { border-color: var(--slate); color: var(--slate); }
-
-/* Open, it is a card like the table below it, not a page of its own. */
-.walk-in-form {
-  margin-bottom: var(--space-md);
-  padding: 14px 16px 16px;
-  background: #fff;
-  border: 1px solid #e4e0dd;
-  border-radius: 12px;
-}
-
-.walk-in-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.walk-in-head .dash-heading { margin-bottom: 0; }
-
-.walk-in-cancel {
-  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.64rem;
-  color: #9a938d;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 2px 6px;
-}
-
-.walk-in-cancel:hover { color: var(--red); }
-
-/* Flows to as many columns as fit, so hiding the student-only fields
-   doesn't leave a hole in the row. */
-.walk-in-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px 12px;
-  align-items: end;
-}
-
-.walk-in-wide { grid-column: span 2; }
-
-.walk-in-narrow { max-width: 110px; }
-
-.walk-in-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.walk-in-field > span {
-  font-size: 0.64rem;
-  letter-spacing: 0.03em;
-  color: #6b6b6b;
-}
-
-.walk-in-field input,
-.walk-in-field select {
-  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.72rem;
-  padding: 6px 8px;
-  color: #1a1a1a;
-  background: #fff;
-  border: 1px solid #ded9d5;
-  border-radius: 7px;
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.walk-in-field input:focus,
-.walk-in-field select:focus {
-  border-color: var(--red);
-  box-shadow: 0 0 0 3px rgba(240, 96, 86, 0.12);
-}
-
-.walk-in-submit {
-  margin-top: 12px;
-  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.68rem;
-  font-weight: 600;
-  padding: 7px 18px;
-  color: #3D4219;
-  background: #CAD182;
-  border: 1px solid #BBC271;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.walk-in-submit:hover:not(:disabled) {
-  background: #BBC271;
-  border-color: #AAB163;
-}
-
-.walk-in-submit:disabled { opacity: 0.6; cursor: default; }
-
-/* Narrow screens: one field per line rather than a cramped grid. */
-@media (max-width: 640px) {
-  .walk-in-grid { grid-template-columns: 1fr; }
-  .walk-in-wide { grid-column: span 1; }
-  .walk-in-narrow { max-width: none; }
 }

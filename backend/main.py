@@ -23,10 +23,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 import bcrypt
-from pydantic import (
-    AfterValidator, BaseModel, EmailStr, Field, StringConstraints,
-    field_validator, model_validator,
-)
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, StringConstraints, field_validator
 import psycopg2
 import psycopg2.errors
 import psycopg2.pool
@@ -710,58 +707,6 @@ class StudentSignUp(BaseModel):
         return value
 
 
-class WalkIn(BaseModel):
-    """Someone who turned up without booking, entered at the desk.
-
-    The same details the online form collects, minus the three time choices:
-    a walk-in is given the slot being served, so there is nothing to choose.
-    The student-only fields are optional here and validated by participant
-    type below, since one form serves all three kinds of donor.
-    """
-    full_name: Name
-    preferred_name: PreferredName = None
-    email_address: SignUpEmail
-    participant_type: str
-    time_slot: str
-    # Students only; checked in `_student_fields_present`.
-    student_id: _text(10) | None = None
-    age: int | None = None
-    grade: str | None = None
-
-    @field_validator("participant_type")
-    @classmethod
-    def _known_type(cls, value: str) -> str:
-        if value not in PARTICIPANT_TYPES:
-            raise ValueError(f"participant_type must be one of {PARTICIPANT_TYPES}")
-        return value
-
-    @model_validator(mode="after")
-    def _student_fields_present(self):
-        """A student needs an ID, an age and a grade; an adult has none of
-        the three, so they are cleared rather than stored as typed."""
-        if self.participant_type == "student":
-            missing = [
-                name
-                for name, value in (
-                    ("student_id", self.student_id),
-                    ("age", self.age),
-                    ("grade", self.grade),
-                )
-                if value in (None, "")
-            ]
-            if missing:
-                raise ValueError(f"students must give {', '.join(missing)}")
-            if self.grade not in GRADES:
-                raise ValueError(f"grade must be one of {GRADES}")
-            if self.age < MIN_SIGN_UP_AGE:
-                raise ValueError(f"must be at least {MIN_SIGN_UP_AGE} years old")
-        else:
-            self.student_id = None
-            self.age = None
-            self.grade = None
-        return self
-
-
 class AdultSignUp(BaseModel):
     """A teacher or community member: no student ID, age or grade.
 
@@ -1147,7 +1092,6 @@ def _insert_sign_up(
     how_hear: str | None = None,
     agreement_signature: str | None = None,
     choice_classes: tuple[str | None, str | None, str | None] = (None, None, None),
-    confirmed: bool = False,
 ) -> SignUpRow:
     """Store one sign-up of any participant type, rejecting duplicates.
 
@@ -1169,9 +1113,7 @@ def _insert_sign_up(
             status_code=400,
             detail="That time is for teachers and community members only.",
         )
-    # Three distinct times, so a ranked list is a real ranking — except for
-    # a walk-in, which is already confirmed into the one slot it repeats.
-    if not confirmed and len(set(choices)) != len(choices):
+    if len(set(choices)) != len(choices):
         raise HTTPException(status_code=400, detail="Choose three different times.")
 
     with db_cursor(commit=True) as cur:
@@ -1219,7 +1161,7 @@ def _insert_sign_up(
                     str.title(full_name), preferred_name or None,
                     participant_type == "student",
                     participant_type, student_id, age, datetime.now(timezone.utc),
-                    email_address, grade, confirmed,
+                    email_address, grade, False,
                     # time_slot is seeded with the first choice rather than left
                     # blank; the row is unconfirmed, so the dashboard ignores it
                     # until a coordinator assigns one. Kept as-is to match the
@@ -1395,58 +1337,6 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
         html_body,
         text_body,
         _consent_form_attachments() if needs_consent else None,
-    )
-
-
-@app.post("/walk-in", response_model=SignUpRow)
-def create_walk_in(
-    walk_in: WalkIn,
-    _: str = Depends(get_current_coordinator),
-):
-    """Add someone who turned up without booking, from the check-in desk.
-
-    Unlike the public forms this writes a confirmed row: they are standing
-    at the table, so there is nothing to assign later. All three choices are
-    set to the slot they are being seen in, which keeps the rule that a
-    confirmed slot is one the person asked for — and means the row can be
-    moved afterwards like any other.
-
-    No confirmation email: they are already here, and the email tells people
-    when to turn up.
-    """
-    _assert_phase_two_open()
-
-    if walk_in.time_slot not in VALID_TIME_SLOTS:
-        raise HTTPException(status_code=400, detail="That time isn't on the schedule.")
-    if (
-        walk_in.participant_type == "student"
-        and walk_in.time_slot in ADULT_ONLY_TIME_SLOTS
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="That time is for teachers and community members only.",
-        )
-
-    # Checked before the insert so a full slot is a clean 409 rather than an
-    # orphaned row. -1 excludes nobody: this person has no id yet.
-    with db_cursor() as cur:
-        _assert_slot_has_room(cur, walk_in.time_slot, -1)
-
-    student = walk_in.participant_type == "student"
-    return _insert_sign_up(
-        full_name=walk_in.full_name,
-        preferred_name=walk_in.preferred_name,
-        email_address=walk_in.email_address,
-        participant_type=walk_in.participant_type,
-        student_id=walk_in.student_id if student else NO_STUDENT_ID,
-        age=walk_in.age if student else NO_AGE,
-        grade=walk_in.grade if student else NO_GRADE,
-        # One slot, three times: they are seen now, so there is no choice to
-        # record — and the confirm rules still hold if the row is moved.
-        first_choice=walk_in.time_slot,
-        second_choice=walk_in.time_slot,
-        third_choice=walk_in.time_slot,
-        confirmed=True,
     )
 
 

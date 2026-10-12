@@ -48,9 +48,9 @@ export default function useLiveSignUps() {
     /**
      * Upsert one row: replace it if it is already held, add it if not.
      *
-     * Used both for pushed updates and for a row this page created — a
-     * walk-in entered at the desk is new, so `applyUpdate` alone would
-     * have nothing to swap and the row would not appear until a refresh.
+     * Used both for pushed updates and for a row this page has just acted
+     * on — confirming someone pending adds them to the day's appointments,
+     * which `applyUpdate` alone could not do, having nothing to swap.
      */
     const applyRemote = useCallback((row) => {
         setSignUps((prev) =>
