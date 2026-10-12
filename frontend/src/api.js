@@ -185,6 +185,20 @@ export const stampDayOf = (id, field, value) =>
         body: value === undefined ? { field } : { field, value },
     });
 
+/**
+ * Set or clear several of one person's day-of times at once.
+ *
+ * One request rather than one per field: sent separately they race, and
+ * each response carries the whole row, so the last to land overwrites the
+ * others and the cells flicker between stale copies.
+ */
+export const stampDayOfBulk = (id, times) =>
+    request(`/sign-ups/${id}/day-of/bulk`, {
+        method: "PATCH",
+        auth: true,
+        body: { times },
+    });
+
 export const setDeferred = (id, deferred) =>
     request(`/sign-ups/${id}/deferred`, {
         method: "PATCH",

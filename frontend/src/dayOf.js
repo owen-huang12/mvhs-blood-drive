@@ -244,3 +244,20 @@ export function classForSlot(row) {
         .indexOf(row.time_slot);
     return formatClass((index === -1 ? null : classes[index]) || "");
 }
+
+/** "Owen Huang" -> "Owen H." — enough to tell two donors apart in a label. */
+export function shortName(fullName) {
+    const parts = (fullName ?? "").trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "";
+    if (parts.length === 1) return parts[0];
+    return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
+/**
+ * The marker colour for a coordinator who has none set.
+ *
+ * Mirrors DEFAULT_COORDINATOR_COLOR in backend/main.py. Each coordinator's
+ * own colour lives in the `color` column of the coordinators table and is
+ * set by hand; this is what anyone unassigned gets.
+ */
+export const DEFAULT_COORDINATOR_COLOR = "#F4978E";

@@ -498,9 +498,34 @@ class CoordinatorCreate(BaseModel):
     password: Password
     invite_code: Annotated[str, Field(max_length=100)]
 
+# The default marker colour, used by anyone whose `color` column is unset.
+# Mirrors DEFAULT_COORDINATOR_COLOR in frontend/src/dayOf.js.
+DEFAULT_COORDINATOR_COLOR = "#F4978E"
+
+_HEX_COLOR = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def _marker_color(value: str | None) -> str:
+    """A coordinator's colour as CSS can use it.
+
+    The column is filled in by hand, so "FF0C0C" and "#FF0C0C" both turn up;
+    the hash is added when it is missing rather than making whoever edits
+    the table remember it. Anything that is not a hex colour falls back to
+    the default instead of reaching the page as a broken style.
+    """
+    if not value:
+        return DEFAULT_COORDINATOR_COLOR
+    match = _HEX_COLOR.match(value.strip())
+    return f"#{match.group(1)}" if match else DEFAULT_COORDINATOR_COLOR
+
+
 class CoordinatorPublic(BaseModel):
     full_name: str
     email: str
+    # Marks this coordinator's selection on the day-of pages, so two people
+    # working the same table can tell their own from each other's. Set by
+    # hand in the coordinators table; unset falls back to the default.
+    color: str = DEFAULT_COORDINATOR_COLOR
 
 class InviteCode(BaseModel):
     invite_code: Annotated[str, Field(max_length=100)]
@@ -620,6 +645,29 @@ class DayOfStamp(BaseModel):
     def _known_field(cls, value: str) -> str:
         if value not in DAY_OF_TIME_FIELDS:
             raise ValueError(f"field must be one of {sorted(DAY_OF_TIME_FIELDS)}")
+        return value
+
+
+class DayOfTimes(BaseModel):
+    """Several of one person's day-of times, written together.
+
+    Clearing a selection or undoing one touches two or three fields on the
+    same row. Sent one at a time they race: each response carries the whole
+    row, so the last to arrive overwrites the others and the table flickers
+    between stale copies. One request settles them in a single update.
+
+    Only the fields present are written; null clears one.
+    """
+    times: dict[str, datetime | None]
+
+    @field_validator("times")
+    @classmethod
+    def _known_fields(cls, value: dict) -> dict:
+        if not value:
+            raise ValueError("no times given")
+        unknown = set(value) - set(DAY_OF_TIME_FIELDS)
+        if unknown:
+            raise ValueError(f"unknown field(s): {sorted(unknown)}")
         return value
 
 
@@ -781,12 +829,17 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
 @app.get("/me", response_model=CoordinatorPublic)
 def get_me(email: str = Depends(get_current_coordinator)):
     with db_cursor() as cur:
-        cur.execute("SELECT full_name, email FROM coordinators WHERE email = %s", (email,))
+        cur.execute(
+            "SELECT full_name, email, color FROM coordinators WHERE email = %s",
+            (email,),
+        )
         row = cur.fetchone()
 
     if row is None:
         raise HTTPException(status_code=404, detail="Coordinator not found")
-    return CoordinatorPublic(full_name=row[0], email=row[1])
+    return CoordinatorPublic(
+        full_name=row[0], email=row[1], color=_marker_color(row[2])
+    )
 
 
 @app.post("/coordinator/verify-invite", dependencies=[rate_limit("invite", 10, 600)])
@@ -1853,25 +1906,50 @@ def move_sign_up(
     return moved
 
 
-def _update_day_of(sign_up_id: int, assignment: str, params: tuple) -> SignUpRow:
-    """Write one day-of field and push the result to every open dashboard.
+def _update_day_of(
+    sign_up_id: int, assignment: str, params: tuple, *, unless_filed: bool = False
+) -> SignUpRow:
+    """Write day-of fields and push the result to every open dashboard.
 
     The check-in desk and the clerk's worklist are different views of the same
     row, so a write from either has to reach the other live.
+
+    `unless_filed` adds the filed check to this statement rather than running
+    it as its own SELECT first. The desk writes these in bursts — clearing a
+    block of cells is one write per person — and a second round trip on each
+    is latency the volunteer feels. Folding it in also closes the gap where
+    the clerk files someone between the check and the write.
     """
+    guard = " AND attendance_cleared = FALSE" if unless_filed else ""
     with db_cursor(commit=True) as cur:
         cur.execute(
             f"""UPDATE sign_ups SET {assignment}
-                WHERE id = %s RETURNING {SIGN_UP_COLUMNS}""",
+                WHERE id = %s{guard} RETURNING {SIGN_UP_COLUMNS}""",
             params,
         )
         row = cur.fetchone()
         if row is None:
+            # Nothing updated: either no such row, or it is filed and the
+            # guard excluded it. Tell them apart so the desk is given the
+            # reason rather than a bare 404.
+            if unless_filed:
+                _raise_missing_or_filed(cur, sign_up_id)
             raise HTTPException(status_code=404, detail="Sign-up not found")
         updated = _row_to_sign_up(row)
 
     broker.publish("sign_up.updated", updated.model_dump(mode="json"))
     return updated
+
+
+def _raise_missing_or_filed(cur, sign_up_id: int) -> None:
+    """Explain why a guarded update matched nothing."""
+    cur.execute("SELECT 1 FROM sign_ups WHERE id = %s", (sign_up_id,))
+    if cur.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Sign-up not found")
+    raise HTTPException(
+        status_code=409,
+        detail="Attendance is already filed for this person.",
+    )
 
 
 @app.patch("/sign-ups/{sign_up_id}/day-of", response_model=SignUpRow)
@@ -1891,8 +1969,28 @@ def stamp_day_of(
     # otherwise write times that don't line up with the rest of the drive.
     value = stamp.value if "value" in stamp.model_fields_set else datetime.now(timezone.utc)
     return _update_day_of(
-        sign_up_id, f"{stamp.field} = %s", (value, sign_up_id)
+        sign_up_id, f"{stamp.field} = %s", (value, sign_up_id), unless_filed=True
     )
+
+
+@app.patch("/sign-ups/{sign_up_id}/day-of/bulk", response_model=SignUpRow)
+def stamp_day_of_bulk(
+    sign_up_id: int,
+    change: DayOfTimes,
+    _: str = Depends(get_current_coordinator),
+):
+    """Set or clear several of one person's times in a single write.
+
+    Refused once the clerk has filed them: those times are part of the
+    school's attendance record, and the desk is told to ask her to clear the
+    filing first. The single-field route is the one-at-a-time path.
+    """
+    _assert_phase_two_open()
+
+    fields = list(change.times)
+    assignment = ", ".join(f"{field} = %s" for field in fields)
+    params = (*(change.times[field] for field in fields), sign_up_id)
+    return _update_day_of(sign_up_id, assignment, params, unless_filed=True)
 
 
 @app.patch("/sign-ups/{sign_up_id}/deferred", response_model=SignUpRow)

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
+import useOverlayMeasure from "./useOverlayMeasure.js";
 
 /**
  * The outline around the slot being served, drawn as one box over the table.
@@ -68,24 +69,7 @@ export default function SlotRing({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [measure, ...deps]);
 
-    useEffect(() => {
-        const scroll = scrollRef.current;
-        if (!scroll) return;
-
-        const observer = new ResizeObserver(measure);
-        observer.observe(scroll);
-        // A font loading or a column resizing moves the rows under the ring.
-        const table = scroll.querySelector("table");
-        if (table) observer.observe(table);
-
-        scroll.addEventListener("scroll", measure);
-        window.addEventListener("resize", measure);
-        return () => {
-            observer.disconnect();
-            scroll.removeEventListener("scroll", measure);
-            window.removeEventListener("resize", measure);
-        };
-    }, [scrollRef, measure]);
+    useOverlayMeasure(scrollRef, measure);
 
     if (!box) return null;
 
@@ -102,7 +86,7 @@ export default function SlotRing({
             {/* Names what the outline means. Read out rather than hidden:
                 for anyone not seeing the ring, this is the only thing
                 saying which slot is being served. */}
-            <span className="slot-ring-tag">now</span>
+            <span className="slot-ring-tag">Current appointments</span>
         </div>
     );
 }

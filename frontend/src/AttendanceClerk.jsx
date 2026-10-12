@@ -35,7 +35,8 @@ import { setAttendance } from "./api.js";
  * attendance cell stays empty and they are left out of the filing count.
  */
 export default function AttendanceClerk() {
-    const { signUps, loading, error, setError, applyUpdate } = useLiveSignUps();
+    const { signUps, loading, error, setError, applyUpdate, write } =
+        useLiveSignUps();
     // Moves on by itself as the drive runs.
     const currentSlot = useCurrentSlot(SLOT_TIMES);
     // The box the ring is measured against and drawn inside.
@@ -68,7 +69,9 @@ export default function AttendanceClerk() {
         try {
             // The row that comes back is authoritative — it carries anything
             // the check-in desk changed while this was in flight.
-            applyUpdate(await setAttendance(row.id, cleared));
+            applyUpdate(
+                await write(row.id, () => setAttendance(row.id, cleared)),
+            );
         } catch (err) {
             // Roll back to what was on screen before the click. Written from
             // `row` rather than by flipping the current value, so a stream

@@ -459,69 +459,134 @@
 /* The slot being served right now, ringed so the desk can find its place in
    a long table at a glance.
 
-   One box drawn over the table rather than borders on the cells. Cell
-   borders came apart wherever the pieces met: each cell paints its own
-   under `border-collapse: separate`, so corners doubled, the column
-   dividers chopped the horizontal runs into segments, and the table's
-   rounded `overflow: hidden` clipped whatever reached the last row.
-
-   SlotRing measures the slot's rows and positions this against the
-   scrolling box, so it is a single rectangle at one width the whole way
-   round, and no cell is touched at all. */
-/* Only the day-of tables: the coordinator dashboard shares this class and
-   has no ring, and a positioned ancestor there is a change for nothing. */
+   One box over the table rather than borders on the cells: each cell
+   paints its own under `border-collapse: separate`, so corners doubled,
+   the column dividers chopped the horizontal runs into segments, and the
+   table's rounded `overflow: hidden` clipped whatever reached the last
+   row. SlotRing measures the slot's rows and positions this against the
+   scrolling box. */
+/* Both overlays are positioned against this box and measured from it, so
+   it has to be the containing block — without it they fall back to the
+   page and land nowhere near the cells they describe. Scoped to the
+   day-of tables: the coordinator dashboard shares the class and has
+   neither overlay. */
 .table-scroll:has(.day-of-table) { position: relative; }
 
-/* 1px, dashed at a length of our own choosing: a plain `dashed` border
-   leaves the dash length to the browser, which at 1px draws them longer
-   than this. Four gradients instead, one per edge, each repeating a 4px
-   cycle that is 0.65 ink and the rest blank. Painted as backgrounds rather
-   than a border, so the box takes no space and nothing shifts under it. */
 .slot-ring {
   position: absolute;
-  background-image:
-    repeating-linear-gradient(to right, #F4978E 0 2.6px, transparent 2.6px 4px),
-    repeating-linear-gradient(to right, #F4978E 0 2.6px, transparent 2.6px 4px),
-    repeating-linear-gradient(to bottom, #F4978E 0 2.6px, transparent 2.6px 4px),
-    repeating-linear-gradient(to bottom, #F4978E 0 2.6px, transparent 2.6px 4px);
-  background-size: 100% 1px, 100% 1px, 1px 100%, 1px 100%;
-  background-position: top left, bottom left, top left, top right;
-  background-repeat: no-repeat;
+  border: 1px solid var(--coral);
   /* Above the rows, below nothing that is interactive. */
   z-index: 3;
   pointer-events: none;
 }
 
-/* Names the outline, sitting on its top-right corner. Solid where the ring
-   is dashed, so it reads as a label on the line rather than part of it.
-
-   Sits above the line, outside the ring — its bottom edge resting on the
-   dashed top border rather than hanging inside the slot. */
+/* Names the outline, on its top-right corner and resting on the line.
+   Matches the selection tags, so the two read as the same kind of mark —
+   one saying which slot is now, the other whose selection a block is. */
 .slot-ring-tag {
   position: absolute;
   bottom: 100%;
   right: 0;
-  /* Shallow on purpose: it sits in the row above the slot, so every pixel
-     of height is one it takes from that row's own contents. */
-  padding: 0 6px 1px;
+  padding: 2px 6px;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
   font-size: 0.58rem;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.04em;
   line-height: 1.25;
+  white-space: nowrap;
   color: #fff;
-  background: #F4978E;
-  /* Rounded on top, square where it meets the line it rests on. */
-  border-radius: 3px 3px 0 0;
+  background: var(--coral);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--coral) 78%, #000);
   pointer-events: none;
 }
 
-/* A drag in progress outranks both. These rules load after the drop
-   highlights in appointment-table.css, so without this a tinted row on the
-   coordinator dashboard would paint over the cue showing where it lands. */
-.appointment-table tr.row-drop td:not(.period-cell) {
-  background: #E8F4FC;
+/* ── Selecting the time cells ──────────────────────────────────────── */
+
+/* Spreadsheet-style: click a cell, drag the handle on its corner to extend
+   the block. Every mark is drawn in --marker, the signed-in coordinator's
+   own colour, so two people working the same table can tell their
+   selection from the other's. */
+
+/* The cells are click targets, but their controls keep their own cursors. */
+.table-scroll.is-selectable .stamp-cell { cursor: cell; }
+
+.table-scroll.is-selectable .stamp-input { cursor: text; }
+
+.table-scroll.is-selectable .stamp-clock { cursor: pointer; }
+
+/* Nothing in the table is text-selected while extending a block: a drag
+   would otherwise smear a highlight across the names. */
+.table-scroll.is-selectable { user-select: none; -webkit-user-select: none; }
+
+.table-scroll.is-selectable input { user-select: text; }
+
+/* Selected cells carry no mark of their own: the block is shown by the
+   outline drawn over it — see SelectionRing — because a border or tint per
+   cell lands on every internal edge too and comes out as a grid rather
+   than one shape. The rows keep whatever colour their own state gives
+   them, so a filed or waiting row still reads as one underneath. */
+
+/* A stamp cell has to be positioned for the handle to hang off its corner. */
+.day-of-table td.stamp-cell { position: relative; }
+
+/* The handle on the block's far corner, dragged to extend it. */
+.cell-handle {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 7px;
+  height: 7px;
+  background: var(--marker);
+  border: 1px solid #fff;
+  border-radius: 2px;
+  cursor: crosshair;
+  z-index: 5;
 }
 
-.appointment-table tr.row-drop-blocked td:not(.period-cell) {
-  background: #F6D2CE;
+/* The block's outline: one box over the selected cells, dotted like the
+   current-slot ring so the two read as the same kind of mark. Painted as
+   backgrounds rather than a border, so it covers the cells exactly. */
+.selection-ring {
+  position: absolute;
+  background-image:
+    repeating-linear-gradient(to right, var(--marker) 0 2.6px, transparent 2.6px 4px),
+    repeating-linear-gradient(to right, var(--marker) 0 2.6px, transparent 2.6px 4px),
+    repeating-linear-gradient(to bottom, var(--marker) 0 2.6px, transparent 2.6px 4px),
+    repeating-linear-gradient(to bottom, var(--marker) 0 2.6px, transparent 2.6px 4px);
+  background-size: 100% 1px, 100% 1px, 1px 100%, 1px 100%;
+  background-position: top left, bottom left, top left, top right;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* Someone else's selection sits behind the viewer's own, so a shared block
+   always shows whose it is from this machine's point of view. */
+.selection-ring:not(.is-self) { z-index: 3; opacity: 0.85; }
+
+.selection-ring.is-self { z-index: 4; }
+
+/* Whose selection it is, on the outline's top-right corner — the same tab
+   the current-slot ring carries. `right` is set inline: tags on rings that
+   share a top edge are shifted along so they sit in a row rather than on
+   top of each other. */
+.selection-ring-tag {
+  position: absolute;
+  bottom: 100%;
+  padding: 2px 6px;
+  /* The table's own face: the tag sits outside the table, so without this
+     it falls back to the page's serif and reads as a different thing. */
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: #fff;
+  background: var(--marker);
+  /* A hairline of the marker darkened, inside the tag's own edge — enough
+     to give it a boundary against the dashed line it sits on, without
+     adding a second colour to manage. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--marker) 78%, #000);
+  pointer-events: none;
 }

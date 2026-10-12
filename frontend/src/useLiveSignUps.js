@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listSignUps } from "./api.js";
 import useSignUpStream from "./useSignUpStream.js";
 
@@ -46,19 +46,33 @@ export default function useLiveSignUps() {
     }, [load]);
 
     /**
-     * Upsert one row: replace it if it is already held, add it if not.
+     * Rows this page has written and not yet seen come back.
      *
-     * Used both for pushed updates and for a row this page has just acted
-     * on — confirming someone pending adds them to the day's appointments,
-     * which `applyUpdate` alone could not do, having nothing to swap.
+     * Every write is echoed to every dashboard, including the one that made
+     * it, so without this a local change lands twice — once from the
+     * response, once from the echo. With several writes in flight the
+     * echoes interleave with the responses and the row flickers between
+     * their partial views on its way to settling.
      */
-    const applyRemote = useCallback((row) => {
+    const pending = useRef(new Map());
+
+    /** Upsert one row: replace it if it is already held, add it if not. */
+    const upsert = useCallback((row) => {
         setSignUps((prev) =>
             prev.some((signUp) => signUp.id === row.id)
                 ? prev.map((signUp) => (signUp.id === row.id ? row : signUp))
                 : [...prev, row],
         );
     }, []);
+
+    /** A pushed row from another dashboard — or an echo of one of ours. */
+    const applyRemote = useCallback(
+        (row) => {
+            if (pending.current.has(row.id)) return;
+            upsert(row);
+        },
+        [upsert],
+    );
 
     useSignUpStream({ onRow: applyRemote, onResync: load });
 
@@ -69,5 +83,30 @@ export default function useLiveSignUps() {
         );
     }, []);
 
-    return { signUps, loading, error, setError, applyUpdate, addRow: applyRemote };
+    /**
+     * Run a write, ignoring this row's pushed updates until it settles.
+     *
+     * Counted rather than flagged: two writes to one row can overlap, and
+     * the first to finish must not reopen it while the second is still out.
+     */
+    const write = useCallback(async (id, action) => {
+        pending.current.set(id, (pending.current.get(id) ?? 0) + 1);
+        try {
+            return await action();
+        } finally {
+            const left = (pending.current.get(id) ?? 1) - 1;
+            if (left > 0) pending.current.set(id, left);
+            else pending.current.delete(id);
+        }
+    }, []);
+
+    return {
+        signUps,
+        loading,
+        error,
+        setError,
+        applyUpdate,
+        write,
+        addRow: upsert,
+    };
 }

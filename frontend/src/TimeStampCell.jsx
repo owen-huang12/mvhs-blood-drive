@@ -20,6 +20,18 @@ export default function TimeStampCell({
     value,
     label,
     locked,
+    // Identifies this cell to the drag-selection, and marks it when it is
+    // part of one. Both come from the table, which owns the selection.
+    cellId,
+    selected = false,
+    // Spreadsheet-style selection: the cell reports clicks and pointer
+    // entries, and carries the drag handle when it is the block's corner.
+    hasHandle = false,
+    onSelect,
+    onFocusCell,
+    onCommitAndMove,
+    onExtendFrom,
+    onExtendTo,
     onStamp,
     onSet,
     onLocked,
@@ -66,13 +78,36 @@ export default function TimeStampCell({
     };
 
     return (
-        <td className="stamp-cell">
+        <td
+            className="stamp-cell"
+            // No styling hangs off this: the block is shown by the outline
+            // drawn over it. Kept as a marker so the selected cells can be
+            // found in the DOM, which is how the outline measures itself.
+            data-selected={selected || undefined}
+            data-cell={cellId}
+            // Selecting is a click on the cell, never on its controls: the
+            // field and the clock are how a single time is edited.
+            onMouseDown={(event) => {
+                // Clicking a control inside the cell does not start a drag,
+                // but it does move the selection here: typing into one cell
+                // while a block elsewhere is still outlined would make the
+                // next Delete clear something the desk is no longer
+                // looking at.
+                if (event.target.closest("input, button")) {
+                    onFocusCell?.();
+                    return;
+                }
+                onSelect?.(event.shiftKey);
+            }}
+            onPointerEnter={() => onExtendTo?.()}
+        >
             <span className="stamp-filled">
                 <input
                     ref={inputRef}
                     type="text"
                     inputMode="numeric"
                     className={`stamp-input${locked ? " is-locked" : ""}`}
+                    data-cell-input={cellId}
                     aria-label={`${label} time`}
                     // Shows the draft while being typed and the saved time
                     // otherwise, so an outside update lands in the cell
@@ -94,7 +129,13 @@ export default function TimeStampCell({
                     onChange={(event) => setDraft(event.target.value)}
                     onBlur={commitEdit}
                     onKeyDown={(event) => {
-                        if (event.key === "Enter") event.target.blur();
+                        if (event.key === "Enter") {
+                            // Blur commits through onBlur; the move happens
+                            // after, so the saved value is the one left
+                            // behind in the cell.
+                            event.target.blur();
+                            onCommitAndMove?.();
+                        }
                         if (event.key === "Escape") {
                             setEditing(false);
                             event.target.blur();
@@ -119,6 +160,15 @@ export default function TimeStampCell({
                     <ClockIcon />
                 </button>
             </span>
+
+            {/* Drag to extend the block, the way a spreadsheet does. */}
+            {hasHandle && (
+                <span
+                    className="cell-handle"
+                    onPointerDown={onExtendFrom}
+                    aria-hidden="true"
+                />
+            )}
 
             {anchor && (
                 <TimePicker

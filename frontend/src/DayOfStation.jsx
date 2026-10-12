@@ -3,6 +3,8 @@ import Header from "./Header.jsx";
 import ProfilePill from "./ProfilePill.jsx";
 import Spinner from "./Spinner.jsx";
 import SlotRing from "./SlotRing.jsx";
+import SelectionRing from "./SelectionRing.jsx";
+import useCellSelection, { cellKey, parseCellKey } from "./useCellSelection.js";
 import PendingSignUps from "./PendingSignUps.jsx";
 import Modal from "./Modal.jsx";
 import TimeStampCell from "./TimeStampCell.jsx";
@@ -24,9 +26,12 @@ import {
     moveSignUp,
     setDeferred,
     stampDayOf,
+    stampDayOfBulk,
 } from "./api.js";
 import {
+    DEFAULT_COORDINATOR_COLOR,
     classForSlot,
+    shortName,
     isVisitComplete,
     readyToFile,
     skipsCanteen,
@@ -35,6 +40,17 @@ import {
 } from "./dayOf.js";
 
 /** The stamps the desk records, in the order a donor passes through them. */
+/** How each arrow key moves the selection through the grid. */
+const ARROW_STEPS = {
+    ArrowUp: { row: -1, column: 0 },
+    ArrowDown: { row: 1, column: 0 },
+    ArrowLeft: { row: 0, column: -1 },
+    ArrowRight: { row: 0, column: 1 },
+};
+
+/** The columns the selection covers, in the order they are shown. */
+const TIME_COLUMNS = ["time_in", "time_canteen", "time_out"];
+
 const STEPS = [
     { field: "time_in", label: "In" },
     { field: "time_canteen", label: "Canteen" },
@@ -49,13 +65,46 @@ const STEPS = [
  * a bare flag, and the reason for it stays with the Red Cross staff.
  */
 export default function DayOfStation() {
-    const { signUps, loading, error, setError, applyUpdate, addRow } =
+    const { signUps, loading, error, setError, applyUpdate, write, addRow } =
         useLiveSignUps();
     // Moves on by itself as the drive runs.
     const currentSlot = useCurrentSlot(SLOT_TIMES);
     // The box the ring is measured against and drawn inside.
     const tableRef = useRef(null);
+    // The day's appointments, in the order they are shown — which is also
+    // the order the selection walks when a block is extended.
+    const rows = signUps
+        .filter((signUp) => signUp.confirmed)
+        .sort(
+            (a, b) =>
+                slotOrder(a.time_slot) - slotOrder(b.time_slot) ||
+                a.full_name.localeCompare(b.full_name),
+        );
+    const rowIds = rows.map((row) => row.id);
+
+    // Spreadsheet-style selection over the three time columns: click a
+    // cell, drag its handle to extend. Delete clears the block, and one
+    // undo puts it back.
+    const {
+        selected,
+        handleCell,
+        clearSelection,
+        selectCell,
+        focusCell,
+        moveFocus,
+        moveDownFrom,
+        startExtend,
+        extendTo,
+    } = useCellSelection({ rows: rowIds, columns: TIME_COLUMNS });
+    // The last bulk clear, for Cmd+Z: the rows exactly as they were.
+    const undoRef = useRef(null);
+    // The clear waiting to be confirmed, with what it would touch.
+    const [confirmingClear, setConfirmingClear] = useState(null);
     const [name, setName] = useState("");
+    // This coordinator's marker colour, set by hand in the coordinators
+    // table. Two people working the same table tell their selections apart
+    // by it; unset falls back to the shared default.
+    const [color, setColor] = useState(DEFAULT_COORDINATOR_COLOR);
     // Positions per slot, for the pending list's picker. Empty reads as
     // "every slot at its base capacity", which is right until it loads.
     const [capacity, setCapacity] = useState({});
@@ -70,7 +119,11 @@ export default function DayOfStation() {
     useEffect(() => {
         let cancelled = false;
         getCurrentCoordinator()
-            .then((me) => !cancelled && setName(me.full_name))
+            .then((me) => {
+                if (cancelled) return;
+                setName(me.full_name);
+                if (me.color) setColor(me.color);
+            })
             .catch(() => {});
         // A failure here leaves every slot at base capacity, which is the
         // right fallback for an unedited drive.
@@ -127,15 +180,253 @@ export default function DayOfStation() {
         }
     };
 
-    const pending = signUps.filter((signUp) => !signUp.confirmed);
+    /**
+     * The selections to outline, the viewer's own among them.
+     *
+     * A list rather than a single block because coordinators will see each
+     * other's: the component already lays several out side by side, so
+     * sharing them later is a matter of adding entries here.
+     */
+    const selections =
+        selected.size > 0
+            ? [
+                  {
+                      id: "self",
+                      selected,
+                      label: shortName(name),
+                      color,
+                      isSelf: true,
+                  },
+              ]
+            : [];
 
-    const rows = signUps
-        .filter((signUp) => signUp.confirmed)
-        .sort(
-            (a, b) =>
-                slotOrder(a.time_slot) - slotOrder(b.time_slot) ||
-                a.full_name.localeCompare(b.full_name),
+    /**
+     * Empty every selected cell at once.
+     *
+     * The cells clear on screen before the writes go out — the desk is
+     * usually fixing a visible mistake and should see it gone — and if any
+     * row fails, that row is put back.
+     *
+     * One request per person, not per cell: three separate writes for the
+     * same row each return the whole row, so the last to arrive overwrites
+     * the others and the cells flicker on their way to settling.
+     */
+    /**
+     * What clearing the selection would actually touch.
+     *
+     * Only cells that hold a time and belong to someone not yet filed:
+     * empty cells have nothing to clear, and filed times are part of the
+     * school's record, which the API refuses too.
+     */
+    const plannedClear = () => {
+        // Grouped by person, so each row is one write.
+        const byRow = new Map();
+        let lockedOut = 0;
+        let cells = 0;
+
+        for (const key of selected) {
+            const { id, field } = parseCellKey(key);
+            const row = signUps.find((signUp) => signUp.id === id);
+            if (!row || !row[field]) continue;
+            if (row.attendance_cleared) {
+                lockedOut += 1;
+                continue;
+            }
+            const entry = byRow.get(id) ?? { row, times: {} };
+            entry.times[field] = null;
+            byRow.set(id, entry);
+            cells += 1;
+        }
+        return { byRow, lockedOut, cells };
+    };
+
+    /**
+     * Ask before clearing more than one cell.
+     *
+     * A single cell is a visible, obvious correction and undo covers it.
+     * A block is not: the selection can run past what is on screen, and
+     * the times it holds are the record of people who have already been
+     * through. Worth one keystroke to be sure.
+     */
+    const confirmClear = () => {
+        const plan = plannedClear();
+        if (plan.cells === 0) {
+            clearSelection();
+            setError(
+                plan.lockedOut > 0
+                    ? "Those times are part of a filed attendance record. Ask the attendance clerk to clear the filing first."
+                    : "",
+            );
+            return;
+        }
+        if (plan.cells === 1) {
+            clearSelected();
+            return;
+        }
+        setConfirmingClear(plan);
+    };
+
+    const clearSelected = async () => {
+        const { byRow, lockedOut } = plannedClear();
+        setConfirmingClear(null);
+
+        if (byRow.size === 0) {
+            clearSelection();
+            setError(
+                lockedOut > 0
+                    ? "Those times are part of a filed attendance record. Ask the attendance clerk to clear the filing first."
+                    : "",
+            );
+            return;
+        }
+
+        // Snapshot for undo, before anything changes.
+        const before = new Map(
+            [...byRow.values()].map(({ row }) => [row.id, { ...row }]),
         );
+        undoRef.current = before;
+
+        byRow.forEach(({ row, times }) => applyUpdate({ ...row, ...times }));
+        clearSelection();
+        setError("");
+
+        const results = await Promise.allSettled(
+            [...byRow.values()].map(({ row, times }) =>
+                write(row.id, () => stampDayOfBulk(row.id, times)),
+            ),
+        );
+
+        const failed = [...byRow.values()].filter(
+            (_, i) => results[i].status === "rejected",
+        );
+        if (failed.length > 0) {
+            // Put back only the rows that did not save, and drop the undo:
+            // it no longer describes what is on screen.
+            failed.forEach(({ row }) => applyUpdate(before.get(row.id)));
+            undoRef.current = null;
+            setError(
+                failed.length === byRow.size
+                    ? "Could not clear those times. Please try again."
+                    : `Could not clear ${failed.length} of ${byRow.size} rows.`,
+            );
+            return;
+        }
+
+        for (const result of results) {
+            if (result.status === "fulfilled") applyUpdate(result.value);
+        }
+
+        if (lockedOut > 0) {
+            setError(
+                `${lockedOut} cell${lockedOut === 1 ? " was" : "s were"} left alone: attendance is already filed.`,
+            );
+        }
+    };
+
+    /** Put back the last bulk clear, one write per person. */
+    const undoClear = async () => {
+        const before = undoRef.current;
+        if (!before) return;
+        undoRef.current = null;
+
+        before.forEach((row) => applyUpdate(row));
+        setError("");
+
+        const rows = [...before.values()];
+        const results = await Promise.allSettled(
+            rows.map((row) =>
+                write(row.id, () =>
+                    stampDayOfBulk(
+                        row.id,
+                        Object.fromEntries(
+                            STEPS.map(({ field }) => [field, row[field] ?? null]),
+                        ),
+                    ),
+                ),
+            ),
+        );
+
+        if (results.some((r) => r.status === "rejected")) {
+            setError("Could not restore those times. Please try again.");
+            return;
+        }
+        for (const result of results) {
+            if (result.status === "fulfilled") applyUpdate(result.value);
+        }
+    };
+
+    /**
+     * Anything outside the time cells dismisses the selection.
+     *
+     * Clicking elsewhere means the desk has moved on — to a checkbox, to
+     * another part of the page — and leaving a block outlined behind them
+     * would make the next Delete a surprise.
+     */
+    useEffect(() => {
+        const onPointerDown = (event) => {
+            if (event.target.closest?.("[data-cell]")) return;
+            // The confirmation is about the selection, so clicking it is
+            // not clicking away from it.
+            if (event.target.closest?.(".modal-card, .modal-overlay")) return;
+            clearSelection();
+        };
+        window.addEventListener("pointerdown", onPointerDown);
+        return () => window.removeEventListener("pointerdown", onPointerDown);
+    }, [clearSelection]);
+
+    // Delete clears the selection; Cmd/Ctrl+Z puts the last clear back.
+    // Ignored while typing, so editing a time still behaves normally.
+    useEffect(() => {
+        const onKeyDown = (event) => {
+            // Escape dismisses the selection from anywhere, including a
+            // field: it is the one key that should always back out. While
+            // the confirmation is open it closes that instead, leaving the
+            // block intact — cancelling should not also lose the selection.
+            if (event.key === "Escape") {
+                if (confirmingClear) setConfirmingClear(null);
+                else clearSelection();
+                return;
+            }
+
+            const typing = event.target.closest?.("input, textarea, select");
+            if (typing) return;
+
+            const undoKey = (event.metaKey || event.ctrlKey) && event.key === "z";
+            if (undoKey) {
+                event.preventDefault();
+                undoClear();
+                return;
+            }
+            if (event.key === "Delete" || event.key === "Backspace") {
+                if (selected.size === 0) return;
+                event.preventDefault();
+                confirmClear();
+                return;
+            }
+
+            // Enter drops into the block's far corner to type a time —
+            // the same cell the drag handle sits on.
+            if (event.key === "Enter") {
+                if (!handleCell) return;
+                event.preventDefault();
+                tableRef.current
+                    ?.querySelector(`[data-cell-input="${handleCell}"]`)
+                    ?.focus();
+                return;
+            }
+
+            // Arrows walk the block around; shift stretches it instead.
+            const step = ARROW_STEPS[event.key];
+            if (step) {
+                event.preventDefault();
+                moveFocus(step.row, step.column, event.shiftKey);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    });
+
+    const pending = signUps.filter((signUp) => !signUp.confirmed);
 
     /**
      * Apply a change to one row, showing it before the server confirms it.
@@ -150,7 +441,7 @@ export default function DayOfStation() {
         setError("");
         try {
             // Authoritative: carries anything the clerk changed meanwhile.
-            applyUpdate(await action());
+            applyUpdate(await write(row.id, action));
         } catch (err) {
             // Back to what was on screen before the click, written from the
             // original row so a stream update isn't undone along with it.
@@ -191,7 +482,7 @@ export default function DayOfStation() {
     return (
         <div className="dashboard-page">
             <Header>
-                <ProfilePill name={name} />
+                <ProfilePill name={name} color={color} />
             </Header>
             <main className="dashboard-content">
                 <h2 className="dashboard-section-title">Check-In Station</h2>
@@ -231,7 +522,11 @@ export default function DayOfStation() {
                                 </span>
                             </h3>
 
-                            <div className="table-scroll" ref={tableRef}>
+                            <div
+                                className="table-scroll is-selectable"
+                                ref={tableRef}
+                                style={{ "--marker": color }}
+                            >
                                 <table className="appointment-table day-of-table attendance-table">
                                     <thead>
                                         <tr>
@@ -420,6 +715,56 @@ export default function DayOfStation() {
                                                             key={step.field}
                                                             value={row[step.field]}
                                                             label={step.label}
+                                                            cellId={cellKey(
+                                                                row.id,
+                                                                step.field,
+                                                            )}
+                                                            selected={selected.has(
+                                                                cellKey(
+                                                                    row.id,
+                                                                    step.field,
+                                                                ),
+                                                            )}
+                                                            hasHandle={
+                                                                handleCell ===
+                                                                cellKey(
+                                                                    row.id,
+                                                                    step.field,
+                                                                )
+                                                            }
+                                                            onSelect={(extend) =>
+                                                                selectCell(
+                                                                    row.id,
+                                                                    step.field,
+                                                                    extend,
+                                                                )
+                                                            }
+                                                            // Enter in the
+                                                            // field saves and
+                                                            // moves down, so a
+                                                            // column of times
+                                                            // can be typed
+                                                            // without reaching
+                                                            // for the mouse.
+                                                            onCommitAndMove={() =>
+                                                                moveDownFrom(
+                                                                    row.id,
+                                                                    step.field,
+                                                                )
+                                                            }
+                                                            onFocusCell={() =>
+                                                                focusCell(
+                                                                    row.id,
+                                                                    step.field,
+                                                                )
+                                                            }
+                                                            onExtendFrom={startExtend}
+                                                            onExtendTo={() =>
+                                                                extendTo(
+                                                                    row.id,
+                                                                    step.field,
+                                                                )
+                                                            }
                                                             locked={row.attendance_cleared}
                                                             onLocked={() =>
                                                                 setExplaining({
@@ -515,6 +860,13 @@ export default function DayOfStation() {
 
                                 {/* Drawn over the table, not out of cell
                                     borders — see SlotRing. */}
+                                {/* The selected block, outlined as one
+                                    shape with whose selection it is. */}
+                                <SelectionRing
+                                    scrollRef={tableRef}
+                                    selections={selections}
+                                />
+
                                 <SlotRing
                                     scrollRef={tableRef}
                                     rowSelector="tr[data-slot-now]"
@@ -527,6 +879,52 @@ export default function DayOfStation() {
                     )}
                 </div>
             </main>
+
+            {confirmingClear && (
+                <Modal
+                    title="Clear these times?"
+                    onClose={() => setConfirmingClear(null)}
+                    actions={
+                        <>
+                            <button
+                                type="button"
+                                className="modal-btn"
+                                onClick={() => setConfirmingClear(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="modal-btn primary"
+                                onClick={clearSelected}
+                            >
+                                Clear {confirmingClear.cells} times
+                            </button>
+                        </>
+                    }
+                >
+                    <p>
+                        This empties {confirmingClear.cells} times across{" "}
+                        {confirmingClear.byRow.size}{" "}
+                        {confirmingClear.byRow.size === 1 ? "person" : "people"}
+                        {confirmingClear.byRow.size <= 4 && (
+                            <>
+                                {" — "}
+                                {[...confirmingClear.byRow.values()]
+                                    .map(({ row }) => shortName(row.full_name))
+                                    .join(", ")}
+                            </>
+                        )}
+                        .
+                    </p>
+                    <p className="modal-note">
+                        {confirmingClear.lockedOut > 0
+                            ? `${confirmingClear.lockedOut} more will be left alone: their attendance is already filed. `
+                            : ""}
+                        ⌘Z puts them back.
+                    </p>
+                </Modal>
+            )}
 
             {explaining?.why === "order" && (
                 <Modal
