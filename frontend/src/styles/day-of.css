@@ -423,26 +423,28 @@
 
 /* ── Row states ────────────────────────────────────────────────────────
    The two tints a row can carry, kept side by side so they can be set
-   against each other. Both must stay clearly apart from plain white and
+   against each other. Scoped to .day-of-table: the coordinator dashboard
+   shares .appointment-table but arranges the schedule rather than tracking
+   the day, so progress through the drive does not belong on it. Both must stay clearly apart from plain white and
    from one another, or a filed row reads as still outstanding.
    ------------------------------------------------------------------- */
 
 /* Outstanding: arrived, not yet filed. The clerk works down these. */
-.appointment-table tr.row-needs-filing td:not(.period-cell) {
+.day-of-table tr.row-needs-filing td:not(.period-cell) {
   background: #fff6f6;
 }
 
 /* Nothing left to record: a student the clerk has filed, or an adult whose
    times are all in. The row reads as closed, and goes plain white again if
    the filing is undone. */
-.appointment-table tr.row-filed td:not(.period-cell) {
+.day-of-table tr.row-filed td:not(.period-cell) {
   background: #f3ffee;
   color: #6f6a63;
 }
 
 /* Done wins over outstanding: the moment it is filed it is no longer work
    to do, whichever order the two classes are written in. */
-.appointment-table tr.row-filed.row-needs-filing td:not(.period-cell) {
+.day-of-table tr.row-filed.row-needs-filing td:not(.period-cell) {
   background: #f3ffee;
 }
 
@@ -537,4 +539,126 @@
 
 .appointment-table tr.row-drop-blocked td:not(.period-cell) {
   background: #F6D2CE;
+}
+
+/* ── Walk-in form ──────────────────────────────────────────────────── */
+
+/* Collapsed by default: the table is the page, and a walk-in is the
+   exception rather than the routine. */
+.walk-in-bar { margin-bottom: var(--space-md); }
+
+.walk-in-open {
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.68rem;
+  padding: 6px 14px;
+  color: #5f5a56;
+  background: #fff;
+  border: 1px solid #ded9d5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.walk-in-open:hover { border-color: var(--slate); color: var(--slate); }
+
+/* Open, it is a card like the table below it, not a page of its own. */
+.walk-in-form {
+  margin-bottom: var(--space-md);
+  padding: 14px 16px 16px;
+  background: #fff;
+  border: 1px solid #e4e0dd;
+  border-radius: 12px;
+}
+
+.walk-in-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.walk-in-head .dash-heading { margin-bottom: 0; }
+
+.walk-in-cancel {
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.64rem;
+  color: #9a938d;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.walk-in-cancel:hover { color: var(--red); }
+
+/* Flows to as many columns as fit, so hiding the student-only fields
+   doesn't leave a hole in the row. */
+.walk-in-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px 12px;
+  align-items: end;
+}
+
+.walk-in-wide { grid-column: span 2; }
+
+.walk-in-narrow { max-width: 110px; }
+
+.walk-in-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.walk-in-field > span {
+  font-size: 0.64rem;
+  letter-spacing: 0.03em;
+  color: #6b6b6b;
+}
+
+.walk-in-field input,
+.walk-in-field select {
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.72rem;
+  padding: 6px 8px;
+  color: #1a1a1a;
+  background: #fff;
+  border: 1px solid #ded9d5;
+  border-radius: 7px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.walk-in-field input:focus,
+.walk-in-field select:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(240, 96, 86, 0.12);
+}
+
+.walk-in-submit {
+  margin-top: 12px;
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 7px 18px;
+  color: #3D4219;
+  background: #CAD182;
+  border: 1px solid #BBC271;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.walk-in-submit:hover:not(:disabled) {
+  background: #BBC271;
+  border-color: #AAB163;
+}
+
+.walk-in-submit:disabled { opacity: 0.6; cursor: default; }
+
+/* Narrow screens: one field per line rather than a cramped grid. */
+@media (max-width: 640px) {
+  .walk-in-grid { grid-template-columns: 1fr; }
+  .walk-in-wide { grid-column: span 1; }
+  .walk-in-narrow { max-width: none; }
 }

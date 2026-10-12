@@ -2,7 +2,6 @@ import { useState } from "react";
 import CapacityPicker from "./CapacityPicker.jsx";
 import PreferredSlotMenu from "./PreferredSlotMenu.jsx";
 import { isStudent, participantOf } from "./participants.js";
-import { isVisitComplete, readyToFile } from "./dayOf.js";
 import {
     buildSchedule,
     colorsForPeriod,
@@ -147,28 +146,10 @@ export default function AppointmentTable({
                                         className={[
                                             index === 0 ? "period-start" : "",
                                             booked ? "" : "slot-open",
-
-                                            // Done donating, waiting on the
-                                            // clerk — her outstanding work.
-                                            booked &&
-                                            readyToFile(
-                                                row.signUp,
-                                                isStudent(row.signUp),
-                                            )
-                                                ? "row-needs-filing"
-                                                : "",
-                                            // Done on the day: the same tints
-                                            // the day-of pages use, so a
-                                            // coordinator watching this table
-                                            // can see the drive working
-                                            // through without opening them.
-                                            booked &&
-                                            isVisitComplete(
-                                                row.signUp,
-                                                isStudent(row.signUp),
-                                            )
-                                                ? "row-filed"
-                                                : "",
+                                            // No day-of tints here: this table
+                                            // is for arranging the schedule,
+                                            // and progress through the drive
+                                            // belongs on the day-of pages.
                                             isDragging ? "row-dragging" : "",
                                             isTarget && !blocks(row.key) ? "row-drop" : "",
                                             isTarget && blocks(row.key) ? "row-drop-blocked" : "",

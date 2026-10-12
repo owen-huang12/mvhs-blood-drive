@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Header from "./Header.jsx";
 import ProfilePill from "./ProfilePill.jsx";
+import WalkInForm from "./WalkInForm.jsx";
 import Spinner from "./Spinner.jsx";
 import Modal from "./Modal.jsx";
 import TimeStampCell from "./TimeStampCell.jsx";
@@ -37,7 +38,8 @@ const STEPS = [
  * a bare flag, and the reason for it stays with the Red Cross staff.
  */
 export default function DayOfStation() {
-    const { signUps, loading, error, setError, applyUpdate } = useLiveSignUps();
+    const { signUps, loading, error, setError, applyUpdate, addRow } =
+        useLiveSignUps();
     // Moves on by itself as the drive runs.
     const currentSlot = useCurrentSlot(SLOT_TIMES);
     const [name, setName] = useState("");
@@ -128,6 +130,13 @@ export default function DayOfStation() {
 
                 <div className="dashboard-body">
                     {error && <p className="login-error">{error}</p>}
+
+                    {/* Above the table: a walk-in is entered before they
+                        can be stamped in. */}
+                    <WalkInForm
+                        currentSlot={currentSlot}
+                        onAdded={addRow}
+                    />
 
                     {loading ? (
                         <Spinner label="Loading appointments…" />

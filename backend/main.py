@@ -1169,7 +1169,9 @@ def _insert_sign_up(
             status_code=400,
             detail="That time is for teachers and community members only.",
         )
-    if len(set(choices)) != len(choices):
+    # Three distinct times, so a ranked list is a real ranking — except for
+    # a walk-in, which is already confirmed into the one slot it repeats.
+    if not confirmed and len(set(choices)) != len(choices):
         raise HTTPException(status_code=400, detail="Choose three different times.")
 
     with db_cursor(commit=True) as cur:
@@ -1393,6 +1395,58 @@ def _send_sign_up_email(sign_up: SignUpRow) -> None:
         html_body,
         text_body,
         _consent_form_attachments() if needs_consent else None,
+    )
+
+
+@app.post("/walk-in", response_model=SignUpRow)
+def create_walk_in(
+    walk_in: WalkIn,
+    _: str = Depends(get_current_coordinator),
+):
+    """Add someone who turned up without booking, from the check-in desk.
+
+    Unlike the public forms this writes a confirmed row: they are standing
+    at the table, so there is nothing to assign later. All three choices are
+    set to the slot they are being seen in, which keeps the rule that a
+    confirmed slot is one the person asked for — and means the row can be
+    moved afterwards like any other.
+
+    No confirmation email: they are already here, and the email tells people
+    when to turn up.
+    """
+    _assert_phase_two_open()
+
+    if walk_in.time_slot not in VALID_TIME_SLOTS:
+        raise HTTPException(status_code=400, detail="That time isn't on the schedule.")
+    if (
+        walk_in.participant_type == "student"
+        and walk_in.time_slot in ADULT_ONLY_TIME_SLOTS
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="That time is for teachers and community members only.",
+        )
+
+    # Checked before the insert so a full slot is a clean 409 rather than an
+    # orphaned row. -1 excludes nobody: this person has no id yet.
+    with db_cursor() as cur:
+        _assert_slot_has_room(cur, walk_in.time_slot, -1)
+
+    student = walk_in.participant_type == "student"
+    return _insert_sign_up(
+        full_name=walk_in.full_name,
+        preferred_name=walk_in.preferred_name,
+        email_address=walk_in.email_address,
+        participant_type=walk_in.participant_type,
+        student_id=walk_in.student_id if student else NO_STUDENT_ID,
+        age=walk_in.age if student else NO_AGE,
+        grade=walk_in.grade if student else NO_GRADE,
+        # One slot, three times: they are seen now, so there is no choice to
+        # record — and the confirm rules still hold if the row is moved.
+        first_choice=walk_in.time_slot,
+        second_choice=walk_in.time_slot,
+        third_choice=walk_in.time_slot,
+        confirmed=True,
     )
 
 
