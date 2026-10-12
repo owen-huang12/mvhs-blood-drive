@@ -1,10 +1,16 @@
-import { useState } from "react";
 import Header from "./Header.jsx";
+import ProfilePill from "./ProfilePill.jsx";
 import Spinner from "./Spinner.jsx";
 import useLiveSignUps from "./useLiveSignUps.js";
 import { isStudent, participantOf } from "./participants.js";
 import { colorsForPeriod, parseSlot, slotOrder } from "./timeSlots.js";
-import { formatStamp, needsFiling, visitDuration } from "./dayOf.js";
+import {
+    formatStamp,
+    isVisitComplete,
+    needsFiling,
+    skipsCanteen,
+    visitDuration,
+} from "./dayOf.js";
 import { setAttendance } from "./api.js";
 
 /**
@@ -20,7 +26,6 @@ import { setAttendance } from "./api.js";
  */
 export default function AttendanceClerk() {
     const { signUps, loading, error, setError, applyUpdate } = useLiveSignUps();
-    const [busyId, setBusyId] = useState(null);
 
     const rows = signUps
         .filter((signUp) => signUp.confirmed)
@@ -35,25 +40,40 @@ export default function AttendanceClerk() {
         (row) => isStudent(row) && needsFiling(row),
     ).length;
 
+    /**
+     * Tick or untick a row, showing it immediately.
+     *
+     * The box is filled before the request goes out, and put back if the
+     * request fails. She works down a list of a hundred names faster than the
+     * round trip, and a box that only fills once the server answers is a box
+     * she clicks twice.
+     */
     const toggle = async (row, cleared) => {
-        setBusyId(row.id);
+        applyUpdate({ ...row, attendance_cleared: cleared });
+        setError("");
         try {
+            // The row that comes back is authoritative — it carries anything
+            // the check-in desk changed while this was in flight.
             applyUpdate(await setAttendance(row.id, cleared));
-            setError("");
         } catch (err) {
+            // Roll back to what was on screen before the click. Written from
+            // `row` rather than by flipping the current value, so a stream
+            // update that landed meanwhile isn't undone along with it.
+            applyUpdate(row);
             setError(
                 err.status === 403
                     ? "Attendance filing is not open yet."
                     : "Could not save that. Please try again.",
             );
-        } finally {
-            setBusyId(null);
         }
     };
 
     return (
         <div className="dashboard-page">
-            <Header />
+            <Header>
+                <ProfilePill />
+            </Header>
+
             <main className="dashboard-content">
                 <h2 className="dashboard-section-title">Attendance</h2>
 
@@ -83,8 +103,9 @@ export default function AttendanceClerk() {
                                             <th>Grade</th>
                                             <th>Student ID</th>
                                             <th className="stamp-cell">Time In</th>
-                                            <th className="stamp-cell">Time Out</th>
                                             <th className="stamp-cell">Canteen</th>
+                                            <th className="stamp-cell">Time Out</th>
+                                            <th className="stamp-cell">Duration</th>
                                             <th className="deferred-cell">Deferred?</th>
                                             <th className="attendance-cell">Filed</th>
                                         </tr>
@@ -139,8 +160,15 @@ export default function AttendanceClerk() {
                                                     key={row.id}
                                                     className={[
                                                         startsPeriod ? "period-start" : "",
+                                                        // Arrived but not yet
+                                                        // filed: still work.
                                                         student && needsFiling(row)
                                                             ? "row-needs-filing"
+                                                            : "",
+                                                        // Done: reads the same
+                                                        // way on both pages.
+                                                        isVisitComplete(row, student)
+                                                            ? "row-filed"
                                                             : "",
                                                     ]
                                                         .filter(Boolean)
@@ -224,8 +252,22 @@ export default function AttendanceClerk() {
                                                             />
                                                         )}
                                                     </td>
+                                                    {/* The same three times the
+                                                        desk stamps, in the order a
+                                                        donor passes through them,
+                                                        then how long it took. */}
                                                     <td className="stamp-cell">
                                                         {formatStamp(row.time_in)}
+                                                    </td>
+                                                    <td className="stamp-cell">
+                                                        {skipsCanteen(row) ? (
+                                                            <span
+                                                                className="not-applicable"
+                                                                title="Deferred — no canteen visit"
+                                                            />
+                                                        ) : (
+                                                            formatStamp(row.time_canteen)
+                                                        )}
                                                     </td>
                                                     <td className="stamp-cell">
                                                         {formatStamp(row.time_out)}
@@ -243,7 +285,6 @@ export default function AttendanceClerk() {
                                                                 checked={
                                                                     row.attendance_cleared
                                                                 }
-                                                                disabled={busyId === row.id}
                                                                 aria-label={`Attendance filed: ${row.full_name}`}
                                                                 onChange={(e) =>
                                                                     toggle(

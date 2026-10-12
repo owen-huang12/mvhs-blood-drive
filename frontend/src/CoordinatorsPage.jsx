@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import icon from "./assets/icon.png";
 import PasswordField from "./PasswordField.jsx";
-import { saveToken } from "./auth.js";
+import { isClerk, saveToken } from "./auth.js";
 import { login } from "./api.js";
 
 export default function CoordinatorsPage() {
@@ -13,6 +13,13 @@ export default function CoordinatorsPage() {
     const navigate = useNavigate();
     // Set by endSession() when a signed-in page's token stops working.
     const expired = useSearchParams()[0].get("expired") === "1";
+    // Where RequireAuth turned them away from. Only in-app paths are
+    // followed, so a crafted `from` can't bounce anyone off the site.
+    const requested = useLocation().state?.from;
+    const destination =
+        typeof requested === "string" && requested.startsWith("/coordinators/")
+            ? requested
+            : "/coordinators/dashboard";
 
     async function handleSubmit(e) {
         e.preventDefault();
@@ -22,7 +29,8 @@ export default function CoordinatorsPage() {
         try {
             const { access_token } = await login(email, password);
             saveToken(access_token);
-            navigate("/coordinators/dashboard");
+            // The clerk can sign in here too, and only has the one page.
+            navigate(isClerk() ? "/coordinators/attendance" : destination);
         } catch (err) {
             setError(
                 err.status === 401

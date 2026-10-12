@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import Header from "./Header.jsx";
+import ProfilePill from "./ProfilePill.jsx";
 import Modal from "./Modal.jsx";
 import Spinner from "./Spinner.jsx";
 import PendingSignUps from "./PendingSignUps.jsx";
 import AppointmentTable from "./AppointmentTable.jsx";
 import useSignUpStream from "./useSignUpStream.js";
-import { clearToken } from "./auth.js";
 import { capacityFor, firstOpenSlot, isSlotFull } from "./timeSlots.js";
 import {
     changeSlotCapacity,
@@ -21,14 +20,6 @@ import {
 /** How long the "slot is full" popup stays up before dismissing itself. */
 const SLOT_FULL_POPUP_MS = 400;
 
-const initialsOf = (name) =>
-    name
-        .split(" ")
-        .map((word) => word[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase();
-
 export default function CoordinatorDashboard() {
     const [name, setName] = useState("");
     const [signUps, setSignUps] = useState([]);
@@ -39,8 +30,6 @@ export default function CoordinatorDashboard() {
     const [error, setError] = useState("");
     const [busyId, setBusyId] = useState(null);
     const [slotFullMessage, setSlotFullMessage] = useState("");
-    const [confirmingSignOut, setConfirmingSignOut] = useState(false);
-    const navigate = useNavigate();
 
     /**
      * Rows this coordinator is currently changing.
@@ -229,11 +218,6 @@ export default function CoordinatorDashboard() {
         setCapacity((prev) => ({ ...prev, [slotKey]: updated.capacity }));
     };
 
-    const handleSignOut = () => {
-        clearToken();
-        navigate("/coordinators");
-    };
-
     const handleSlotFull = (slotKey) => {
         const seats = capacityFor(slotKey, capacity);
         setSlotFullMessage(
@@ -249,14 +233,7 @@ export default function CoordinatorDashboard() {
     return (
         <div className="dashboard-page">
             <Header>
-                <button
-                    className="profile-pill"
-                    onClick={() => setConfirmingSignOut(true)}
-                    title="Sign out"
-                >
-                    <span className="profile-avatar">{initialsOf(name)}</span>
-                    <span className="profile-name">{name}</span>
-                </button>
+                <ProfilePill name={name} />
             </Header>
 
             <main className="dashboard-content">
@@ -302,36 +279,6 @@ export default function CoordinatorDashboard() {
                     autoCloseMs={SLOT_FULL_POPUP_MS}
                 >
                     <p>{slotFullMessage}</p>
-                </Modal>
-            )}
-
-            {confirmingSignOut && (
-                <Modal
-                    title="Sign out"
-                    onClose={() => setConfirmingSignOut(false)}
-                    actions={
-                        <>
-                            <button
-                                type="button"
-                                className="modal-btn"
-                                onClick={() => setConfirmingSignOut(false)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                className="modal-btn primary"
-                                onClick={handleSignOut}
-                            >
-                                Sign out
-                            </button>
-                        </>
-                    }
-                >
-                    <p>Sign out of the coordinator dashboard?</p>
-                    <p className="modal-note">
-                        You'll need to sign in again to manage appointments.
-                    </p>
                 </Modal>
             )}
         </div>

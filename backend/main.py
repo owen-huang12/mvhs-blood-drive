@@ -26,6 +26,7 @@ import bcrypt
 from pydantic import AfterValidator, BaseModel, EmailStr, Field, StringConstraints, field_validator
 import psycopg2
 import psycopg2.errors
+import psycopg2.pool
 import resend
 
 load_dotenv()
@@ -339,21 +340,83 @@ def _assert_invite_code(code: str) -> None:
             detail="That admin code isn't right.",
         )
 
+# Connections are pooled because opening one is the expensive part: against
+# Neon a fresh connect costs well over a second, where the query that follows
+# it takes tens of milliseconds. Reusing them turns every request from "slow
+# enough to notice at the desk" into one that answers immediately.
+#
+# Built lazily so importing this module never blocks on the database, and
+# guarded by a lock because several requests can race to create it.
+_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+_pool_lock = threading.Lock()
+
+# Small: the drive is a handful of volunteers at a few desks, and Neon's free
+# tier is not generous with connections.
+POOL_MIN_CONNECTIONS = 1
+POOL_MAX_CONNECTIONS = 10
+
+
+def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    global _pool
+    if _pool is None:
+        with _pool_lock:
+            if _pool is None:
+                _pool = psycopg2.pool.ThreadedConnectionPool(
+                    POOL_MIN_CONNECTIONS, POOL_MAX_CONNECTIONS, DATABASE_URL
+                )
+    return _pool
+
+
+# How long a request waits for a free connection before giving up. The pool
+# raises the moment it is empty rather than queueing, which would turn a
+# burst of clicks at the desk into 500s; waiting a moment is almost always
+# right, since a connection frees up in milliseconds.
+POOL_WAIT_SECONDS = 10
+_POOL_POLL_SECONDS = 0.02
+
+
+def _borrow_connection():
+    """A pooled connection, waiting briefly if they are all in use."""
+    pool = _get_pool()
+    deadline = time.monotonic() + POOL_WAIT_SECONDS
+    while True:
+        try:
+            return pool, pool.getconn()
+        except psycopg2.pool.PoolError:
+            if time.monotonic() >= deadline:
+                raise HTTPException(
+                    status_code=503,
+                    detail="The server is busy. Please try again.",
+                )
+            time.sleep(_POOL_POLL_SECONDS)
+
+
 @contextmanager
 def db_cursor(commit: bool = False):
-    """Yield a cursor, committing on success and always closing the connection.
+    """Yield a cursor, committing on success and always returning the
+    connection to the pool.
 
     Without this the previous per-route boilerplate leaked a connection
     whenever a query raised.
     """
-    conn = psycopg2.connect(DATABASE_URL)
+    pool, conn = _borrow_connection()
     try:
         with conn.cursor() as cur:
             yield cur
         if commit:
             conn.commit()
+        else:
+            # A pooled connection is reused, so an idle transaction left open
+            # by a plain SELECT would hold its snapshot into the next request
+            # and show it stale rows.
+            conn.rollback()
+    except Exception:
+        # Never hand back a connection mid-transaction: the next borrower
+        # would inherit the failed state.
+        conn.rollback()
+        raise
     finally:
-        conn.close()
+        pool.putconn(conn)
 
 
 def create_access_token(data: dict) -> str:
@@ -1858,8 +1921,30 @@ def set_attendance(
     Separate from the timestamps on purpose: arriving and being marked off are
     different facts with different owners, and they are routinely out of step
     while the clerk works through the list.
+
+    Students only. Teachers and community members have no class to be marked
+    out of, so there is nothing to file; the dashboards leave the box off
+    their rows, and this refuses it for anything that reaches the API anyway.
     """
     _assert_phase_two_open()
+
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT participant_type, is_student FROM sign_ups WHERE id = %s",
+            (sign_up_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Sign-up not found")
+    # Falls back to is_student for rows written before participant_type,
+    # the same way the dashboards read them.
+    participant_type = row[0] or ("student" if row[1] else "teacher")
+    if participant_type != "student":
+        raise HTTPException(
+            status_code=409,
+            detail="Only students are filed with the school's attendance system.",
+        )
+
     return _update_day_of(
         sign_up_id,
         "attendance_cleared = %s",

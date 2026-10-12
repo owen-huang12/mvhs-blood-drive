@@ -92,3 +92,64 @@ export function fromTimeInput(text, existing) {
     at.setHours(hours, minutes, 0, 0);
     return at.toISOString();
 }
+
+/**
+ * The three stamps in the order a donor passes through them.
+ *
+ * Shared by the station and the clerk's worklist, so both describe the
+ * sequence the same way.
+ */
+export const TIME_FIELDS = [
+    { field: "time_in", label: "Time in" },
+    { field: "time_canteen", label: "Canteen" },
+    { field: "time_out", label: "Time out" },
+];
+
+/**
+ * Why these times can't be right, or "" when they can.
+ *
+ * A donor arrives, then goes to the canteen, then leaves, so the stamps have
+ * to run in that order. Checked on the way in rather than after the fact: an
+ * out-of-order pair is almost always a typo or a stamp on the wrong row, and
+ * it quietly corrupts the visit duration if it lands.
+ *
+ * Only fills in the gaps it is given — a missing middle stamp is normal while
+ * a visit is in progress, so in/out alone are still compared to each other.
+ */
+export function timeOrderError(times) {
+    const stamped = TIME_FIELDS.map(({ field, label }) => ({
+        label,
+        at: times[field] ? new Date(times[field]).getTime() : null,
+    })).filter((step) => step.at !== null);
+
+    for (let i = 1; i < stamped.length; i += 1) {
+        const previous = stamped[i - 1];
+        const current = stamped[i];
+        if (current.at < previous.at) {
+            return `${current.label} can't be before ${previous.label.toLowerCase()}.`;
+        }
+    }
+    return "";
+}
+
+/**
+ * Does this visit skip the canteen?
+ *
+ * Someone turned away never gets there, so the cell is ruled off as not
+ * applicable rather than left looking unfinished, and nothing waits on it.
+ */
+export const skipsCanteen = (row) => Boolean(row.deferred);
+
+/**
+ * Is there nothing left to record for this person?
+ *
+ * Students finish when the clerk files them — that is the last fact anyone
+ * writes about the visit. Adults are never filed, so they finish once their
+ * times are in: arrival, the canteen unless they were deferred, and leaving.
+ */
+export function isVisitComplete(row, student) {
+    if (student) return Boolean(row.attendance_cleared);
+    return Boolean(
+        row.time_in && row.time_out && (skipsCanteen(row) || row.time_canteen),
+    );
+}

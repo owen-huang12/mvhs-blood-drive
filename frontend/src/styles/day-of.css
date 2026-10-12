@@ -18,10 +18,20 @@
    five columns are given a floor to sit at and room to breathe, rather than
    being squeezed to their content until the headers wrap a word per line. */
 .attendance-table .stamp-cell {
-  width: 86px;
-  min-width: 86px;
-  padding-left: 8px;
-  padding-right: 8px;
+  width: 78px;
+  min-width: 78px;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+/* Every column the desk writes to — the three times, then deferred and
+   filed — is ruled off from its neighbours, so each is its own box to fill
+   rather than a run of marks. Lighter than the period rules, which separate
+   groups rather than fields. */
+.day-of-table .stamp-cell,
+.day-of-table .deferred-cell,
+.day-of-table .attendance-cell {
+  border-left: 1px solid #ebe8e5;
 }
 
 .attendance-table .deferred-cell {
@@ -108,19 +118,22 @@
    value or dragged into a copied selection. */
 .attendance-table .not-applicable {
   display: block;
-  width: 100%;
-  /* Centred on the text line, so it sits where a value would. */
+  /* Inset from the cell's edges: the rule says "nothing here", and it reads
+     as that more clearly with air around it than stretched edge to edge. */
+  width: 60%;
+  /* Centred on the text line, so it sits where a value would, and centred
+     across the cell. */
   height: 0;
-  margin: 0.55em 0;
+  margin: 0.55em auto;
   border-top: 1px dashed #9a938d;
 }
 
 /* Tap targets, not text links: this is used standing up at a desk. */
 .stamp-btn {
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.8rem;
-  min-width: 68px;
-  padding: 7px 12px;
+  font-size: 0.64rem;
+  min-width: 54px;
+  padding: 5px 10px;
   color: #5f5a56;
   background: #faf9f8;
   border: 1px solid #ded9d5;
@@ -145,8 +158,8 @@
 /* Reads as a value, not a control — the clock beside it is the affordance.
    Double-click opens the inline editor. */
 .stamp-text {
-  padding: 7px 4px 7px 8px;
-  font-size: 0.9rem;
+  padding: 5px 3px 5px 6px;
+  font-size: 0.72rem;
   color: #1a1a1a;
   cursor: text;
   user-select: none;
@@ -180,28 +193,90 @@
 
 /* Typed in place. Sized to match the text it replaces so the row doesn't
    jump when the cell switches modes. */
+/* Always on screen, filled or empty, so the column reads the same the whole
+   way down. Quiet at rest — a dense table of these should not look like a
+   wall of boxes — and it takes a border on hover and focus. */
 .stamp-input {
-  width: 92px;
-  padding: 6px 8px;
+  width: 62px;
+  padding: 5px 4px;
   font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
+  /* Both set explicitly: a form control takes neither from the cell around
+     it, which left these times heavier and darker than the same times on
+     the clerk's page, where they are plain text. */
+  font-weight: 400;
   text-align: center;
-  color: #1a1a1a;
-  background: #fff;
-  border: 1px solid var(--red);
-  border-radius: 8px;
+  color: #5f5a56;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
   font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+/* The field's own name, shown until it holds a time. */
+.stamp-input::placeholder {
+  color: #b3aca6;
+  font-variant-numeric: normal;
+}
+
+.stamp-input:hover:not(:disabled):not(.is-locked) {
+  border-color: #ded9d5;
+  background: #fff;
+}
+
+.stamp-input:focus {
+  border-color: var(--red);
+  background: #fff;
+}
+
+/* Part of a filed attendance record. Still readable and still clickable —
+   the click raises the explanation. */
+.stamp-input.is-locked {
+  color: #8c8580;
+  cursor: help;
 }
 
 .stamp-input:focus { outline: none; }
 
 /* One colour for every checkbox on both pages. A ticked box means the same
-   thing wherever it appears, so it should not change colour with ownership. */
+   thing wherever it appears, so it should not change colour with ownership.
+   Drawn rather than accent-coloured, matching the custom boxes on the sign-up
+   form: the browser's own control ignores a border radius and sits heavier
+   than everything around it. */
 .day-of-table input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  /* Must reset: the cell's input rules would otherwise pad it into a slab. */
+  padding: 0;
+  border: 1px solid #cfc9c4;
+  border-radius: 4px;
+  background-color: #fff;
   cursor: pointer;
-  accent-color: var(--red);
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.day-of-table input[type="checkbox"]:hover:not(:disabled) {
+  border-color: #b3aca7;
+}
+
+/* The tick is drawn dark, not white: on this olive a white tick sits at
+   1.6:1 and all but disappears, where #3D4219 clears AA at 6.5:1. */
+.day-of-table input[type="checkbox"]:checked {
+  background-color: #CAD182;
+  border-color: #BBC271;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%233D4219' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3L12.5 5'/%3E%3C/svg%3E");
+  background-size: 11px 11px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.day-of-table input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--slate);
+  outline-offset: 1px;
 }
 
 /* Shown on the station, owned by the clerk. Kept full-colour rather than
@@ -382,14 +457,31 @@
 
 .time-action:disabled { opacity: 0.5; cursor: default; }
 
-/* A deferred donor still occupies the slot, so the row stays in place and is
-   only muted — not hidden. */
-.appointment-table tr.row-deferred td:not(.period-cell) {
-  background: #fbf7f6;
-  color: #8c8580;
+/* A deferral is not the end of a visit — they are still checked out — so it
+   carries no row styling of its own. The checkbox is the record of it, and
+   the row tints with everything else once there is nothing left to enter. */
+
+/* ── Row states ────────────────────────────────────────────────────────
+   The two tints a row can carry, kept side by side so they can be set
+   against each other. Both must stay clearly apart from plain white and
+   from one another, or a filed row reads as still outstanding.
+   ------------------------------------------------------------------- */
+
+/* Outstanding: arrived, not yet filed. The clerk works down these. */
+.appointment-table tr.row-needs-filing td:not(.period-cell) {
+  background: #fff6f6;
 }
 
-/* Outstanding attendance: arrived, not yet filed. The clerk works down these. */
-.appointment-table tr.row-needs-filing td:not(.period-cell) {
-  background: #fdf8ee;
+/* Nothing left to record: a student the clerk has filed, or an adult whose
+   times are all in. The row reads as closed, and goes plain white again if
+   the filing is undone. */
+.appointment-table tr.row-filed td:not(.period-cell) {
+  background: #f3ffee;
+  color: #6f6a63;
+}
+
+/* Done wins over outstanding: the moment it is filed it is no longer work
+   to do, whichever order the two classes are written in. */
+.appointment-table tr.row-filed.row-needs-filing td:not(.period-cell) {
+  background: #f3ffee;
 }

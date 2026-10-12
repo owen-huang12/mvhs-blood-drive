@@ -3,21 +3,22 @@ import TimePicker from "./TimePicker.jsx";
 import { formatStamp, fromTimeInput, toTimeInput } from "./dayOf.js";
 
 /**
- * One day-of time: tap to stamp, then correct it two ways.
+ * One day-of time: a field you type into, with a clock that stamps now.
  *
- * Empty cells show a button so the common path at the desk is a single tap.
- * Once stamped, the clock opens the picker and double-clicking the time types
- * it directly — a volunteer who already knows the time shouldn't have to go
- * through a panel to enter it.
+ * The field is always there, filled or empty, so the column reads the same
+ * down its whole length and a volunteer who already knows the time can just
+ * write it. It carries no placeholder: the column header already names the
+ * field, and three repeated words per row only crowd the table. The clock
+ * beside it is the one-tap path — it stamps the current time on an empty
+ * cell and opens the picker on a filled one.
  *
  * `locked` means the clerk has already filed this student's attendance. Both
- * routes stay clickable so `onLocked` can explain why nothing happened — a
- * dead control would leave the desk guessing.
+ * controls stay live so `onLocked` can explain why nothing happened — a dead
+ * control would leave the desk guessing.
  */
 export default function TimeStampCell({
     value,
     label,
-    busy,
     locked,
     onStamp,
     onSet,
@@ -42,13 +43,14 @@ export default function TimeStampCell({
         setAnchor({ x: event.clientX, y: event.clientY });
     };
 
-    const openEditor = () => {
+    /** Clock: stamp the server's clock when empty, correct it when not. */
+    const handleClock = (event) => {
         if (locked) {
             onLocked();
             return;
         }
-        setDraft(toTimeInput(value));
-        setEditing(true);
+        if (value) openPicker(event);
+        else onStamp();
     };
 
     const commitEdit = () => {
@@ -63,76 +65,66 @@ export default function TimeStampCell({
         if (next && next !== value) onSet(next);
     };
 
-    if (editing) {
-        return (
-            <td className="stamp-cell">
+    return (
+        <td className="stamp-cell">
+            <span className="stamp-filled">
                 <input
                     ref={inputRef}
                     type="text"
                     inputMode="numeric"
-                    className="stamp-input"
+                    className={`stamp-input${locked ? " is-locked" : ""}`}
                     aria-label={`${label} time`}
-                    value={draft}
-                    disabled={busy}
+                    // Shows the draft while being typed and the saved time
+                    // otherwise, so an outside update lands in the cell
+                    // without overwriting what someone is mid-way through.
+                    value={editing ? draft : formatStamp(value)}
+                    readOnly={locked}
+                    title={locked ? "Attendance already filed" : undefined}
+                    onMouseDown={(event) => {
+                        if (!locked) return;
+                        // Explain instead of focusing a field she cannot use.
+                        event.preventDefault();
+                        onLocked();
+                    }}
+                    onFocus={() => {
+                        if (locked) return;
+                        setDraft(toTimeInput(value));
+                        setEditing(true);
+                    }}
                     onChange={(event) => setDraft(event.target.value)}
                     onBlur={commitEdit}
                     onKeyDown={(event) => {
-                        if (event.key === "Enter") commitEdit();
-                        if (event.key === "Escape") setEditing(false);
+                        if (event.key === "Enter") event.target.blur();
+                        if (event.key === "Escape") {
+                            setEditing(false);
+                            event.target.blur();
+                        }
                     }}
                 />
-            </td>
-        );
-    }
-
-    return (
-        <td className="stamp-cell">
-            {value ? (
-                <span className="stamp-filled">
-                    {/* Double-click, so a stray single click on a dense table
-                        never puts a filed time into an editor by accident. */}
-                    <span
-                        className={`stamp-text${locked ? " is-locked" : ""}`}
-                        onDoubleClick={openEditor}
-                        title={
-                            locked
-                                ? "Attendance already filed"
-                                : "Double-click to type a time"
-                        }
-                    >
-                        {formatStamp(value)}
-                    </span>
-                    <button
-                        type="button"
-                        className="stamp-clock"
-                        disabled={busy}
-                        aria-label={`Change ${label} time`}
-                        title={
-                            locked ? "Attendance already filed" : "Pick a time"
-                        }
-                        onClick={openPicker}
-                    >
-                        <ClockIcon />
-                    </button>
-                </span>
-            ) : (
                 <button
                     type="button"
-                    className="stamp-btn"
-                    disabled={busy}
-                    title={locked ? "Attendance already filed" : `Stamp ${label}`}
-                    onClick={() => (locked ? onLocked() : onStamp())}
+                    className="stamp-clock"
+                    aria-label={
+                        value ? `Change ${label} time` : `Stamp ${label} now`
+                    }
+                    title={
+                        locked
+                            ? "Attendance already filed"
+                            : value
+                              ? "Pick a time"
+                              : "Stamp the current time"
+                    }
+                    onClick={handleClock}
                 >
-                    {label}
+                    <ClockIcon />
                 </button>
-            )}
+            </span>
 
             {anchor && (
                 <TimePicker
                     anchor={anchor}
                     value={value}
                     label={label}
-                    busy={busy}
                     onSave={(next) => {
                         setAnchor(null);
                         if (next !== value) onSet(next);
