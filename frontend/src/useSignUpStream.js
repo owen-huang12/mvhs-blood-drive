@@ -16,22 +16,30 @@ const ROW_EVENTS = new Set(["sign_up.created", "sign_up.updated"]);
 /**
  * Keep the dashboard in step with every other open dashboard.
  *
- * `onRow` receives a full sign-up row to upsert, `onCapacity` a slot whose
+ * `onRow` receives a full sign-up row to upsert, `onSelection` another
+ * coordinator's selected cells, `onCapacity` a slot whose
  * positions another coordinator changed. `onResync` is called when the local
  * view may have missed events and has to be rebuilt from a fetch — events sent
  * while disconnected are not replayed, so reconnecting without a resync would
  * leave the table silently stale.
  */
-export default function useSignUpStream({ onRow, onCapacity, onResync }) {
+export default function useSignUpStream({
+    onRow,
+    onCapacity,
+    onSelection,
+    onResync,
+}) {
     // Held in refs so a changing callback identity never tears down the
     // connection; the effect below deliberately runs once.
     const onRowRef = useRef(onRow);
     const onCapacityRef = useRef(onCapacity);
+    const onSelectionRef = useRef(onSelection);
     const onResyncRef = useRef(onResync);
 
     useEffect(() => {
         onRowRef.current = onRow;
         onCapacityRef.current = onCapacity;
+        onSelectionRef.current = onSelection;
         onResyncRef.current = onResync;
     });
 
@@ -68,6 +76,10 @@ export default function useSignUpStream({ onRow, onCapacity, onResync }) {
                             if (isReconnect) onResyncRef.current();
                         } else if (type === "desync") {
                             onResyncRef.current();
+                        } else if (type === "selection.changed") {
+                            // Only the day-of pages draw other people's
+                            // selections; everywhere else ignores them.
+                            onSelectionRef.current?.(data);
                         } else if (type === "capacity.updated") {
                             // Optional: the day-of pages don't show capacity.
                             onCapacityRef.current?.(data);

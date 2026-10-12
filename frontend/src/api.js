@@ -13,7 +13,10 @@ export class ApiError extends Error {
     }
 }
 
-async function request(path, { method = "GET", body, form, auth = false } = {}) {
+async function request(
+    path,
+    { method = "GET", body, form, auth = false, keepalive = false } = {},
+) {
     const headers = {};
     if (auth) headers.Authorization = `Bearer ${getToken()}`;
     if (body) headers["Content-Type"] = "application/json";
@@ -22,6 +25,7 @@ async function request(path, { method = "GET", body, form, auth = false } = {}) 
         method,
         headers,
         body: body ? JSON.stringify(body) : form,
+        keepalive,
     });
 
     if (res.status === 401 && auth) endSession();
@@ -197,6 +201,21 @@ export const stampDayOfBulk = (id, times) =>
         method: "PATCH",
         auth: true,
         body: { times },
+    });
+
+/**
+ * Publish this coordinator's selected cells to the other dashboards.
+ *
+ * `keepalive` lets the browser finish the request after the page is gone,
+ * so closing a tab mid-selection clears the ring for everyone instead of
+ * leaving it to time out.
+ */
+export const publishSelection = (cells, { keepalive = false } = {}) =>
+    request("/selection", {
+        method: "PUT",
+        auth: true,
+        body: { cells },
+        keepalive,
     });
 
 export const setDeferred = (id, deferred) =>

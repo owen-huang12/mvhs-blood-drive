@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 import bcrypt
@@ -166,6 +166,73 @@ def _drain(queue: asyncio.Queue) -> None:
 
 
 broker = EventBroker()
+
+
+# How long a selection is kept after its last update. A dashboard republishes
+# while it is being changed and clears on the way out, so this only matters
+# for the case neither covers: a laptop closed mid-selection, which would
+# otherwise leave a ring on the table for everyone else indefinitely.
+SELECTION_TTL_SECONDS = 90
+
+
+class SelectionStore:
+    """Who has which cells selected, right now.
+
+    Entirely in memory and never written to the database: this is a cursor
+    position, worth nothing a second later, and putting it on the write path
+    would slow down writes that actually matter.
+
+    Keyed by coordinator email, so opening a second tab replaces that
+    person's selection rather than adding a second ghost of them.
+    """
+
+    def __init__(self) -> None:
+        self._by_email: dict[str, dict] = {}
+        self._lock = threading.Lock()
+
+    def set(self, email: str, entry: dict | None) -> None:
+        with self._lock:
+            if entry is None:
+                self._by_email.pop(email, None)
+            else:
+                self._by_email[email] = {**entry, "at": time.monotonic()}
+
+    def live(self, exclude: str | None = None) -> list[dict]:
+        """Every selection still inside its TTL, dropping the stale ones."""
+        cutoff = time.monotonic() - SELECTION_TTL_SECONDS
+        with self._lock:
+            for email in [e for e, v in self._by_email.items() if v["at"] < cutoff]:
+                del self._by_email[email]
+            return [
+                {k: v for k, v in entry.items() if k != "at"}
+                for email, entry in self._by_email.items()
+                if email != exclude
+            ]
+
+
+selections = SelectionStore()
+
+# A coordinator's name and colour, looked up once each. Both are set by hand
+# and effectively never change during a drive, and a selection update must
+# not cost a database round trip — it fires while someone is dragging.
+_identity_cache: dict[str, tuple[str, str]] = {}
+
+
+def _coordinator_identity(email: str) -> tuple[str, str]:
+    """This coordinator's display name and marker colour."""
+    cached = _identity_cache.get(email)
+    if cached is not None:
+        return cached
+
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT full_name, color FROM coordinators WHERE email = %s", (email,)
+        )
+        row = cur.fetchone()
+
+    identity = (row[0] if row else email, _marker_color(row[1] if row else None))
+    _identity_cache[email] = identity
+    return identity
 
 
 @asynccontextmanager
@@ -669,6 +736,15 @@ class DayOfTimes(BaseModel):
         if unknown:
             raise ValueError(f"unknown field(s): {sorted(unknown)}")
         return value
+
+
+class SelectionUpdate(BaseModel):
+    """Which cells a coordinator currently has selected.
+
+    An empty list means they have none — sent when a selection is dismissed
+    so the others see it go rather than waiting out the TTL.
+    """
+    cells: Annotated[list[Annotated[str, Field(max_length=40)]], Field(max_length=400)]
 
 
 class DeferredChange(BaseModel):
@@ -1491,6 +1567,10 @@ async def stream_events(_: str = Depends(get_coordinator_or_clerk)):
         async with broker.subscribe() as queue:
             # Lets the client distinguish "connected" from "still dialling".
             yield _sse_frame("ready", {})
+            # Selections already in progress, so a dashboard opening mid-drive
+            # sees who is working where without waiting for them to move.
+            for entry in selections.live():
+                yield _sse_frame("selection.changed", entry)
             while True:
                 try:
                     event_type, data = await asyncio.wait_for(
@@ -1991,6 +2071,40 @@ def stamp_day_of_bulk(
     assignment = ", ".join(f"{field} = %s" for field in fields)
     params = (*(change.times[field] for field in fields), sign_up_id)
     return _update_day_of(sign_up_id, assignment, params, unless_filed=True)
+
+
+@app.put("/selection", status_code=204)
+def set_selection(
+    update: SelectionUpdate,
+    email: str = Depends(get_current_coordinator),
+):
+    """Publish this coordinator's selected cells to the other dashboards.
+
+    Deliberately touches no database: a selection is a cursor position, and
+    writing one would put this on the same connection pool as the writes
+    that matter. It is held in memory and fanned out over the stream
+    already open to every dashboard, so this costs one in-memory write and
+    no extra connection.
+    """
+    _assert_phase_two_open()
+
+    full_name, color = _coordinator_identity(email)
+    entry = (
+        {
+            "email": email,
+            "full_name": full_name,
+            "color": color,
+            "cells": update.cells,
+        }
+        if update.cells
+        else None
+    )
+    selections.set(email, entry)
+    broker.publish(
+        "selection.changed",
+        entry or {"email": email, "cells": []},
+    )
+    return Response(status_code=204)
 
 
 @app.patch("/sign-ups/{sign_up_id}/deferred", response_model=SignUpRow)

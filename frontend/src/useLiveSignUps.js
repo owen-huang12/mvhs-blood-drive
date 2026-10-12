@@ -13,7 +13,7 @@ import useSignUpStream from "./useSignUpStream.js";
  * single-field taps that settle immediately, not drags that a late-arriving
  * update could yank out from under the user.
  */
-export default function useLiveSignUps() {
+export default function useLiveSignUps({ onSelection } = {}) {
     const [signUps, setSignUps] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -74,7 +74,7 @@ export default function useLiveSignUps() {
         [upsert],
     );
 
-    useSignUpStream({ onRow: applyRemote, onResync: load });
+    useSignUpStream({ onRow: applyRemote, onSelection, onResync: load });
 
     /** Swap in the row a local write returned. */
     const applyUpdate = useCallback((updated) => {

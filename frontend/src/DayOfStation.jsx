@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Header from "./Header.jsx";
 import ProfilePill from "./ProfilePill.jsx";
 import Spinner from "./Spinner.jsx";
@@ -10,6 +10,7 @@ import Modal from "./Modal.jsx";
 import TimeStampCell from "./TimeStampCell.jsx";
 import useLiveSignUps from "./useLiveSignUps.js";
 import useCurrentSlot from "./useCurrentSlot.js";
+import useSharedSelection from "./useSharedSelection.js";
 import { isStudent, participantOf } from "./participants.js";
 import {
     SLOT_TIMES,
@@ -65,8 +66,19 @@ const STEPS = [
  * a bare flag, and the reason for it stays with the Red Cross staff.
  */
 export default function DayOfStation() {
+    // Who is signed in here. The email identifies this dashboard's own
+    // selection in the stream, which echoes every event back to its sender.
+    const [email, setEmail] = useState("");
+    // The stream is opened before the hook that handles its selection
+    // events is declared, so it is given a stable forwarder rather than
+    // the handler itself.
+    const onSelectionRef = useRef(() => {});
+    const forwardSelection = useCallback(
+        (entry) => onSelectionRef.current(entry),
+        [],
+    );
     const { signUps, loading, error, setError, applyUpdate, write, addRow } =
-        useLiveSignUps();
+        useLiveSignUps({ onSelection: forwardSelection });
     // Moves on by itself as the drive runs.
     const currentSlot = useCurrentSlot(SLOT_TIMES);
     // The box the ring is measured against and drawn inside.
@@ -96,6 +108,16 @@ export default function DayOfStation() {
         startExtend,
         extendTo,
     } = useCellSelection({ rows: rowIds, columns: TIME_COLUMNS });
+
+    // Shared with the other dashboards, and theirs collected in return.
+    // Declared after the selection it publishes, which is what `selected`
+    // comes from.
+    const { others, applySelection } = useSharedSelection(selected, {
+        selfEmail: email,
+    });
+    useEffect(() => {
+        onSelectionRef.current = applySelection;
+    }, [applySelection]);
     // The last bulk clear, for Cmd+Z: the rows exactly as they were.
     const undoRef = useRef(null);
     // The clear waiting to be confirmed, with what it would touch.
@@ -122,6 +144,7 @@ export default function DayOfStation() {
             .then((me) => {
                 if (cancelled) return;
                 setName(me.full_name);
+                setEmail(me.email);
                 if (me.color) setColor(me.color);
             })
             .catch(() => {});
@@ -187,8 +210,15 @@ export default function DayOfStation() {
      * other's: the component already lays several out side by side, so
      * sharing them later is a matter of adding entries here.
      */
-    const selections =
-        selected.size > 0
+    const selections = [
+        // Everyone else first, so the viewer's own is painted on top.
+        ...others.map((other) => ({
+            id: other.email,
+            selected: other.selected,
+            label: shortName(other.full_name),
+            color: other.color,
+        })),
+        ...(selected.size > 0
             ? [
                   {
                       id: "self",
@@ -198,7 +228,8 @@ export default function DayOfStation() {
                       isSelf: true,
                   },
               ]
-            : [];
+            : []),
+    ];
 
     /**
      * Empty every selected cell at once.
