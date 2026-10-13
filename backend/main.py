@@ -610,7 +610,7 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-# Who a sign-up is. Students give a student ID, age and grade; teachers and
+# Who a sign-up is. Students give a student ID, age and grade; staff and
 # community members give only a name, an email and their three choices.
 PARTICIPANT_TYPES = ("student", "teacher", "community")
 
@@ -832,7 +832,7 @@ class StudentSignUp(BaseModel):
 
 
 class AdultSignUp(BaseModel):
-    """A teacher or community member: no student ID, age or grade.
+    """A staff or community member: no student ID, age or grade.
 
     Age is not asked for because the 16-year-old minimum is a school-student
     concern; every adult signing up here clears it by definition.
@@ -1023,7 +1023,7 @@ def _ensure_unique_constraints() -> None:
             """CREATE UNIQUE INDEX IF NOT EXISTS sign_ups_email_key
                ON sign_ups (LOWER(email_address))"""
         )
-        # Partial: teachers and community members all store a blank ID.
+        # Partial: staff and community members all store a blank ID.
         cur.execute(
             """CREATE UNIQUE INDEX IF NOT EXISTS sign_ups_student_id_key
                ON sign_ups (student_id) WHERE student_id <> ''"""
@@ -1240,7 +1240,7 @@ def _insert_sign_up(
     ):
         raise HTTPException(
             status_code=400,
-            detail="That time is for teachers and community members only.",
+            detail="That time is for staff and community members only.",
         )
     if len(set(choices)) != len(choices):
         raise HTTPException(status_code=400, detail="Choose three different times.")
@@ -1260,7 +1260,7 @@ def _insert_sign_up(
             )
 
         # Student ID is checked too, so a second email can't get round the
-        # rule above. Skipped when blank: teachers and community members have
+        # rule above. Skipped when blank: staff and community members have
         # no ID, and every one of them would otherwise collide on "".
         if student_id:
             cur.execute("SELECT 1 FROM sign_ups WHERE student_id = %s", (student_id,))
@@ -1498,7 +1498,7 @@ def create_student_sign_up(sign_up: StudentSignUp, background: BackgroundTasks):
 
 @app.post('/adult-sign-up', dependencies=[rate_limit("sign-up", 40, 600)])
 def create_adult_sign_up(sign_up: AdultSignUp, background: BackgroundTasks):
-    """Register a teacher or community member.
+    """Register a staff or community member.
 
     They give only a name, an email and three choices; the student-only
     columns are stored blank (see NO_STUDENT_ID and friends).
@@ -1602,7 +1602,7 @@ def list_sign_ups(_: str = Depends(get_coordinator_or_clerk)):
     return [_row_to_sign_up(row) for row in rows]
 
 
-# Positions available per slot. 8:15 AM (teachers and community members only)
+# Positions available per slot. 8:15 AM (staff and community members only)
 # seats six, then it alternates 6, 4, 6, 4... from 8:30 AM, so every half hour
 # from there seats ten. Mirrored by BASE_CAPACITY in frontend/src/timeSlots.js.
 #
@@ -1647,7 +1647,7 @@ MAX_SLOT_CAPACITY = 20
 # from the capacity table above so the two can never drift apart.
 VALID_TIME_SLOTS = frozenset(BASE_SLOT_CAPACITY)
 
-# Slots students can't request: teachers and community members only. Still on
+# Slots students can't request: staff and community members only. Still on
 # the schedule, so coordinators see and assign them like any other. Mirrored
 # by `adultsOnly` in frontend/src/timeSlots.js.
 ADULT_ONLY_TIME_SLOTS = frozenset({"Before school - 8:15 AM"})
@@ -1672,7 +1672,7 @@ def _ensure_slot_capacity_table() -> None:
 def _ensure_participant_type_column() -> None:
     """Add `participant_type` to sign_ups, backfilling from `is_student`.
 
-    `is_student` is a boolean and so cannot distinguish teachers from community
+    `is_student` is a boolean and so cannot distinguish staff from community
     members. It is kept in step on write rather than dropped, since existing
     rows and the old client both still read it.
     """
@@ -2136,7 +2136,7 @@ def set_attendance(
     different facts with different owners, and they are routinely out of step
     while the clerk works through the list.
 
-    Students only. Teachers and community members have no class to be marked
+    Students only. Staff and community members have no class to be marked
     out of, so there is nothing to file; the dashboards leave the box off
     their rows, and this refuses it for anything that reaches the API anyway.
     """

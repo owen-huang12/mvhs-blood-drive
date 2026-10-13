@@ -15,7 +15,7 @@ import {
  * earlier pick — silently dropping someone's 1st choice would be worse than
  * making them deselect first.
  *
- * `adult` (teachers and community members) includes the adults-only slots.
+ * `adult` (staff and community members) includes the adults-only slots.
  */
 export default function TimeSlotChoices({ adult = false, selected, onChange }) {
     const slots = adult ? TIME_SLOTS : TIME_SLOTS.filter((slot) => !slot.adultsOnly);

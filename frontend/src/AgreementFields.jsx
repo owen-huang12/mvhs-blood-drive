@@ -5,7 +5,7 @@ import { useFullNameCheck } from "./fullName.js";
  * What a donor agrees to, and the signature that agrees to it.
  *
  * `student` adds the part about missing class, which doesn't apply to
- * teachers or community members.
+ * staff or community members.
  */
 export default function AgreementFields({ student = false, signature, onSignatureChange }) {
     const signatureRef = useFullNameCheck(signature);

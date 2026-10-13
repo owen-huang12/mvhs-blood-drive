@@ -14,7 +14,7 @@ import { useFullNameCheck } from "./fullName.js";
 import { useScrollToTop } from "./scrollToTop.js";
 
 /**
- * Sign-up form for teachers and community members.
+ * Sign-up form for staff and community members.
  *
  * Everything the student form asks for that only applies to school students —
  * student ID, age, grade, the 16-year-old parent consent step, and missing

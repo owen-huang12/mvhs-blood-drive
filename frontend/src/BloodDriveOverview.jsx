@@ -7,7 +7,7 @@ import CollapsibleSection from "./CollapsibleSection.jsx";
  * team. Replace the strings; nothing else needs to change.
  */
 const ROLE_NOTES = {
-    teacher: `As a teacher, you will be given priority when assigned your MVHS Stanford Blood drive appointment time. We are so grateful for your support!`,
+    teacher: `As a staff member, you will be given priority when assigned your MVHS Stanford Blood drive appointment time. We are so grateful for your support!`,
     community: `As a community member you will be given priority when assigned your MVHS Stanford Blood drive appointment time. Truly, we are so grateful for your support!`,
 };
 
@@ -15,7 +15,7 @@ const ROLE_NOTES = {
  * The "what is this drive" blurb shown above every sign-up form, regardless
  * of participant type. Kept in one place so the three forms can't drift.
  *
- * `role` adds a note telling a teacher or community member how their form
+ * `role` adds a note telling a staff or community member how their form
  * differs from the student one; omitted (or "student") shows none.
  */
 export default function BloodDriveOverview({ role }) {

@@ -47,7 +47,7 @@ async function request(
 export const signUpStudent = (signUp) =>
     request("/student-sign-up", { method: "POST", body: signUp });
 
-/** Teachers and community members: no student ID, age or grade. */
+/** Staff and community members: no student ID, age or grade. */
 export const signUpAdult = (signUp) =>
     request("/adult-sign-up", { method: "POST", body: signUp });
 

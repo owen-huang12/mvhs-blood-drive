@@ -183,7 +183,7 @@
   white-space: nowrap;
 }
 
-/* Teachers and community members have no student ID or age, so the status
+/* Staff and community members have no student ID or age, so the status
    runs across those columns rather than leaving two blank cells. */
 .pending-status[data-span="3"] { grid-column: span 3; }
 

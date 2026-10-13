@@ -5,7 +5,7 @@
  * "Period 2 - 8:30 AM"), which is what `formatSlot` produces and
  * `parseSlot` reads back.
  *
- * `adultsOnly` slots are for teachers and community members: the student form
+ * `adultsOnly` slots are for staff and community members: the student form
  * leaves them out, but the coordinator dashboard shows them like any other.
  * Mirrored by ADULT_ONLY_TIME_SLOTS in backend/main.py.
  */

@@ -16,7 +16,7 @@ const STUDENT_REQUIREMENTS = [
     ...SHARED_REQUIREMENTS,
 ];
 
-// Teachers and community members: SBC's rules for donors 19 and older. The
+// Staff and community members: SBC's rules for donors 19 and older. The
 // age and consent rules and the 18-and-under weight chart don't apply; the
 // adult weight rule is a flat minimum instead.
 const ADULT_REQUIREMENTS = [

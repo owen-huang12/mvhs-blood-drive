@@ -11,8 +11,8 @@ const STUDENT = {
     text: "#3E7793",
 };
 
-const TEACHER = {
-    label: "Teacher",
+const STAFF = {
+    label: "Staff",
     bg: "#DDEAD9",
     text: "#42703C",
 };
@@ -25,7 +25,8 @@ const COMMUNITY = {
 
 export const PARTICIPANTS = {
     student: STUDENT,
-    teacher: TEACHER,
+    // The stored value stays 'teacher': it is in every existing row.
+    teacher: STAFF,
     community: COMMUNITY,
 };
 
@@ -38,7 +39,7 @@ export const PARTICIPANTS = {
 export function participantOf(signUp) {
     const type =
         signUp.participant_type ?? (signUp.is_student ? "student" : "teacher");
-    return PARTICIPANTS[type] ?? TEACHER;
+    return PARTICIPANTS[type] ?? STAFF;
 }
 
 /** Only students carry a student ID, an age and a grade. */

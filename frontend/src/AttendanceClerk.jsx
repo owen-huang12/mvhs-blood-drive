@@ -1,8 +1,11 @@
-import { useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import Header from "./Header.jsx";
 import ProfilePill from "./ProfilePill.jsx";
 import Spinner from "./Spinner.jsx";
 import SlotRing from "./SlotRing.jsx";
+import SelectionRing from "./SelectionRing.jsx";
+import useSharedSelection from "./useSharedSelection.js";
+import { cellKey } from "./useCellSelection.js";
 import useLiveSignUps from "./useLiveSignUps.js";
 import useCurrentSlot from "./useCurrentSlot.js";
 import { isStudent, participantOf } from "./participants.js";
@@ -14,6 +17,7 @@ import {
 } from "./timeSlots.js";
 import {
     classForSlot,
+    shortName,
     formatStamp,
     isVisitComplete,
     needsFiling,
@@ -23,6 +27,9 @@ import {
 } from "./dayOf.js";
 import { setAttendance } from "./api.js";
 
+/** She publishes no selection of her own, so this never changes. */
+const EMPTY_SELECTION = new Set();
+
 /**
  * The attendance clerk's worklist.
  *
@@ -30,17 +37,31 @@ import { setAttendance } from "./api.js";
  * whether a student has been entered into the school's attendance system.
  * No health information appears anywhere on the page.
  *
- * Teachers and community members are listed too — she needs to know who is
+ * Staff and community members are listed too — she needs to know who is
  * out of the building — but they have no class to be marked out of, so their
  * attendance cell stays empty and they are left out of the filing count.
  */
 export default function AttendanceClerk() {
+    // Coordinators' selections, so she can see which times are being
+    // changed before she files them. She publishes none of her own: she
+    // cannot edit these cells, so there is nothing for anyone to avoid.
+    const onSelectionRef = useRef(() => {});
+    const forwardSelection = useCallback(
+        (entry) => onSelectionRef.current(entry),
+        [],
+    );
     const { signUps, loading, error, setError, applyUpdate, write } =
-        useLiveSignUps();
+        useLiveSignUps({ onSelection: forwardSelection });
     // Moves on by itself as the drive runs.
     const currentSlot = useCurrentSlot(SLOT_TIMES);
     // The box the ring is measured against and drawn inside.
     const tableRef = useRef(null);
+    const { others, applySelection } = useSharedSelection(EMPTY_SELECTION, {
+        enabled: false,
+    });
+    useEffect(() => {
+        onSelectionRef.current = applySelection;
+    }, [applySelection]);
 
     const rows = signUps
         .filter((signUp) => signUp.confirmed)
@@ -279,11 +300,32 @@ export default function AttendanceClerk() {
                                                     {/* The same three times the
                                                         desk stamps, in the order a
                                                         donor passes through them,
-                                                        then how long it took. */}
-                                                    <td className="stamp-cell">
+                                                        then how long it took.
+
+                                                        Marked with the same cell
+                                                        keys the station uses, so a
+                                                        coordinator's selection can
+                                                        be drawn over them here —
+                                                        she cannot edit these, but
+                                                        knowing a time is being
+                                                        changed is worth seeing
+                                                        before she files it. */}
+                                                    <td
+                                                        className="stamp-cell"
+                                                        data-cell={cellKey(
+                                                            row.id,
+                                                            "time_in",
+                                                        )}
+                                                    >
                                                         {formatStamp(row.time_in)}
                                                     </td>
-                                                    <td className="stamp-cell">
+                                                    <td
+                                                        className="stamp-cell"
+                                                        data-cell={cellKey(
+                                                            row.id,
+                                                            "time_canteen",
+                                                        )}
+                                                    >
                                                         {skipsCanteen(row) ? (
                                                             <span
                                                                 className="not-applicable"
@@ -293,7 +335,13 @@ export default function AttendanceClerk() {
                                                             formatStamp(row.time_canteen)
                                                         )}
                                                     </td>
-                                                    <td className="stamp-cell">
+                                                    <td
+                                                        className="stamp-cell"
+                                                        data-cell={cellKey(
+                                                            row.id,
+                                                            "time_out",
+                                                        )}
+                                                    >
                                                         {formatStamp(row.time_out)}
                                                     </td>
                                                     <td className="stamp-cell">
@@ -327,6 +375,17 @@ export default function AttendanceClerk() {
 
                                 {/* Drawn over the table, not out of cell
                                     borders — see SlotRing. */}
+                                {/* Where the coordinators are working. */}
+                                <SelectionRing
+                                    scrollRef={tableRef}
+                                    selections={others.map((other) => ({
+                                        id: other.email,
+                                        selected: other.selected,
+                                        label: shortName(other.full_name),
+                                        color: other.color,
+                                    }))}
+                                />
+
                                 <SlotRing
                                     scrollRef={tableRef}
                                     rowSelector="tr[data-slot-now]"

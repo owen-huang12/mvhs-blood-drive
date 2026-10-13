@@ -4,7 +4,7 @@ import { animate } from "animejs";
 
 const ROUTES = [
     { to: "/signup/student", label: "I'm a student" },
-    { to: "/signup/teacher", label: "I'm a teacher" },
+    { to: "/signup/teacher", label: "I'm staff" },
     { to: "/signup/community-member", label: "I'm a community member" },
 ];
 
