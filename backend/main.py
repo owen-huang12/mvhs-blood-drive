@@ -1580,6 +1580,25 @@ def _reminder_email(sign_up: SignUpRow, kind: str = REMINDER_TWO_DAY) -> tuple[s
     return subject, html_body, text_body
 
 
+def _clear_reminders_for_slot_change(cur, sign_up_id: int, new_slot: str) -> None:
+    """Make this person due a reminder again if their time has moved.
+
+    A reminder states the appointment time, so once the time changes the one
+    they were sent is wrong. Dropping the claim puts them back in the queue,
+    where the next send — by the scheduler or the button — gives them a
+    corrected one. Everyone else keeps theirs and is not mailed twice.
+
+    Called inside the caller's transaction, so the claim only clears if the
+    move itself commits. A move to the same slot is not a change and leaves
+    the claim alone.
+    """
+    cur.execute("SELECT time_slot FROM sign_ups WHERE id = %s", (sign_up_id,))
+    row = cur.fetchone()
+    if row is None or row[0] == new_slot:
+        return
+    cur.execute("DELETE FROM reminders_sent WHERE sign_up_id = %s", (sign_up_id,))
+
+
 def _reminder_recipients(kind: str) -> list[SignUpRow]:
     """Confirmed donors who have not been sent this mailing yet."""
     students_only = REMINDER_SCHEDULE[kind]["students_only"]
@@ -2404,6 +2423,7 @@ def confirm_sign_up(
             )
 
         _assert_slot_has_room(cur, confirmation.time_slot, sign_up_id)
+        _clear_reminders_for_slot_change(cur, sign_up_id, confirmation.time_slot)
 
         cur.execute(
             f"""UPDATE sign_ups SET time_slot = %s, confirmed = TRUE
@@ -2459,6 +2479,7 @@ def move_sign_up(
 
     with db_cursor(commit=True) as cur:
         _assert_slot_has_room(cur, move.time_slot, sign_up_id)
+        _clear_reminders_for_slot_change(cur, sign_up_id, move.time_slot)
 
         cur.execute(
             f"""UPDATE sign_ups SET time_slot = %s, confirmed = TRUE
