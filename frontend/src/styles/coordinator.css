@@ -272,8 +272,44 @@
   border-left: 1px solid #ebe8e5;
 }
 
-/* Due but not yet sent: present, so the column is not read as broken. */
-.sent-pending { color: #b3aca6; }
+/* In place of a dash: the thing to do about a row that has not had this
+   mailing, or holds one for an appointment time that has since changed.
+   The same flat rectangle as the mailing buttons above it. */
+.resend-btn {
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.62rem;
+  padding: 4px 12px;
+  border: 1.5px solid #cfc9c4;
+  border-radius: 0;
+  background: #fff;
+  color: #1a1a1a;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.resend-btn:hover:not(:disabled) {
+  border-color: var(--slate);
+  background-color: #eaf5fc;
+}
+
+/* Before the mailing opens there is nothing to press, so it dims rather
+   than disappearing — the row still shows it is waiting. */
+.resend-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A send that failed: still a button, because trying again is the fix. */
+.resend-btn.is-failed {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.resend-btn.is-failed:hover:not(:disabled) {
+  background-color: #fdecea;
+  border-color: var(--red);
+}
 
 /* Hover carries the reason, which is too long for the cell. */
 .emailing-error {
@@ -281,3 +317,7 @@
   cursor: help;
   border-bottom: 1px dotted var(--red);
 }
+
+/* Someone became due after the automatic send — a late confirmation, or a
+   time that moved — and is waiting on a coordinator to send to them. */
+.mailing-waiting { color: var(--red); }

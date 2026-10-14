@@ -226,6 +226,10 @@ export const getEmailingStatus = () =>
 export const sendReminders = (kind) =>
     request(`/emailing/send/${kind}`, { method: "POST", auth: true });
 
+/** Send one mailing to one person, from their row's own button. */
+export const sendReminderToOne = (kind, signUpId) =>
+    request(`/emailing/send/${kind}/${signUpId}`, { method: "POST", auth: true });
+
 export const setDeferred = (id, deferred) =>
     request(`/sign-ups/${id}/deferred`, {
         method: "PATCH",

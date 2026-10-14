@@ -9,6 +9,7 @@ import {
     getCurrentCoordinator,
     getEmailingStatus,
     sendReminders,
+    sendReminderToOne,
 } from "./api.js";
 import { DEFAULT_COORDINATOR_COLOR } from "./dayOf.js";
 
@@ -61,8 +62,25 @@ function Mailing({ mailing, onSend, sending }) {
 
             <p className="mailing-note">
                 {mailing.total} {mailing.students_only ? "students" : "donors"},{" "}
-                {mailing.open_now ? "open since" : "opens"}{" "}
-                {formatOpens(mailing.send_at)}.
+                {mailing.ran_at
+                    ? `sent automatically ${formatOpens(mailing.ran_at)}`
+                    : `${mailing.open_now ? "open since" : "opens"} ${formatOpens(mailing.send_at)}`}
+                .
+                {/* The automatic send happens once. Anyone due after it has
+                    become due since — confirmed late, or moved to another
+                    time, so the reminder they have is now wrong — and is
+                    sent only when a coordinator chooses to. */}
+                {mailing.ran_at && mailing.pending > 0 && (
+                    <>
+                        {" "}
+                        <span className="mailing-waiting">
+                            {mailing.pending}{" "}
+                            {mailing.pending === 1 ? "person has" : "people have"}{" "}
+                            changed since and{" "}
+                            {mailing.pending === 1 ? "needs" : "need"} sending.
+                        </span>
+                    </>
+                )}
             </p>
 
             <button
@@ -83,8 +101,16 @@ function Mailing({ mailing, onSend, sending }) {
     );
 }
 
-/** One mailing's cell in the table: when it went, or why it didn't. */
-function SentCell({ sentAt, error, applies }) {
+/**
+ * One mailing's cell for one person: when it went, or a way to send it.
+ *
+ * A row that has never had this mailing, or holds one for an appointment
+ * time that has since changed, gets a button rather than a dash — the thing
+ * to do about it is right there, instead of having to work out who is
+ * covered by the bulk send.
+ */
+function SentCell({ row, mailing, onSend, sending }) {
+    const applies = !mailing?.students_only || row.participant_type === "student";
     if (!applies) {
         return (
             <td className="sent-cell">
@@ -92,18 +118,50 @@ function SentCell({ sentAt, error, applies }) {
             </td>
         );
     }
+
+    const kind = mailing.kind;
+    const sentAt = kind === "day_of" ? row.day_of_sent_at : row.two_day_sent_at;
+    const error = kind === "day_of" ? row.day_of_error : row.two_day_error;
+
     if (error) {
         return (
             <td className="sent-cell">
-                <span className="emailing-error" title={error}>
-                    failed
-                </span>
+                <button
+                    type="button"
+                    className="resend-btn is-failed"
+                    title={`${error} — click to try again`}
+                    disabled={sending}
+                    onClick={() => onSend(row, mailing)}
+                >
+                    {sending ? "Sending…" : "Retry"}
+                </button>
             </td>
         );
     }
+
+    // Sent for the time they still hold: nothing to do.
+    if (sentAt && row.time_slot === (kind === "day_of" ? row.day_of_slot : row.two_day_slot)) {
+        return <td className="sent-cell">{formatSent(sentAt)}</td>;
+    }
+
+    // Sent, but for a time that has since changed — or never sent at all.
     return (
         <td className="sent-cell">
-            {sentAt ? formatSent(sentAt) : <span className="sent-pending">—</span>}
+            <button
+                type="button"
+                className="resend-btn"
+                disabled={!mailing.open_now || sending}
+                title={
+                    mailing.open_now
+                        ? sentAt
+                            ? "Their appointment time changed since this was sent"
+                            : "Not sent yet"
+                        : "This mailing has not opened yet"
+                }
+                onClick={() => onSend(row, mailing)}
+            >
+                {sending ? "Sending…" : sentAt ? "Resend" : "Send"}
+            </button>
         </td>
     );
 }
@@ -127,6 +185,8 @@ export default function EmailingPage() {
     const [error, setError] = useState("");
     const [confirming, setConfirming] = useState(null);
     const [sending, setSending] = useState("");
+    // The one row being sent to, as "kind:id", so only its button waits.
+    const [sendingRow, setSendingRow] = useState("");
     const [result, setResult] = useState(null);
 
     const load = useCallback(async () => {
@@ -182,7 +242,28 @@ export default function EmailingPage() {
         }
     };
 
+    const sendOne = async ({ row, mailing }) => {
+        const key = `${mailing.kind}:${row.id}`;
+        setSendingRow(key);
+        try {
+            await sendReminderToOne(mailing.kind, row.id);
+            setResult({ label: `${mailing.label} to ${row.full_name}`, sent: 1, failed: 0 });
+            setError("");
+            await load();
+        } catch (err) {
+            setError(
+                err.status === 409 || err.status === 502
+                    ? err.message
+                    : "Could not send that email. Please try again.",
+            );
+        } finally {
+            setSendingRow("");
+            setConfirming(null);
+        }
+    };
+
     const dayOf = status?.mailings.find((m) => m.kind === "day_of");
+    const twoDay = status?.mailings.find((m) => m.kind === "two_day");
 
     return (
         <div className="dashboard-page">
@@ -247,8 +328,6 @@ export default function EmailingPage() {
                                         {status.rows.map((row) => {
                                             const person = participantOf(row);
                                             const slot = parseSlot(row.time_slot);
-                                            const student =
-                                                row.participant_type === "student";
                                             return (
                                                 <tr
                                                     key={row.id}
@@ -282,18 +361,36 @@ export default function EmailingPage() {
                                                         {slot.time}
                                                     </td>
                                                     <SentCell
-                                                        sentAt={row.two_day_sent_at}
-                                                        error={row.two_day_error}
-                                                        applies
+                                                        row={row}
+                                                        mailing={twoDay}
+                                                        onSend={(r, m) =>
+                                                            setConfirming({
+                                                                row: r,
+                                                                mailing: m,
+                                                            })
+                                                        }
+                                                        sending={
+                                                            sendingRow ===
+                                                            `two_day:${row.id}`
+                                                        }
                                                     />
                                                     {/* The day-of slip is a
                                                         student's excusal from
                                                         class, so adults have
                                                         none to receive. */}
                                                     <SentCell
-                                                        sentAt={row.day_of_sent_at}
-                                                        error={row.day_of_error}
-                                                        applies={student}
+                                                        row={row}
+                                                        mailing={dayOf}
+                                                        onSend={(r, m) =>
+                                                            setConfirming({
+                                                                row: r,
+                                                                mailing: m,
+                                                            })
+                                                        }
+                                                        sending={
+                                                            sendingRow ===
+                                                            `day_of:${row.id}`
+                                                        }
                                                     />
                                                 </tr>
                                             );
@@ -307,8 +404,14 @@ export default function EmailingPage() {
             </main>
 
             {confirming && (
+                // Either a whole mailing or a single row, told apart by
+                // whether a row came with it.
                 <Modal
-                    title={`Send the ${confirming.label.toLowerCase()}?`}
+                    title={
+                        confirming.row
+                            ? `Send to ${confirming.row.full_name}?`
+                            : `Send the ${confirming.label.toLowerCase()}?`
+                    }
                     onClose={() => setConfirming(null)}
                     actions={
                         <>
@@ -322,28 +425,61 @@ export default function EmailingPage() {
                             <button
                                 type="button"
                                 className="modal-btn primary"
-                                onClick={() => send(confirming)}
-                                disabled={Boolean(sending)}
+                                onClick={() =>
+                                    confirming.row
+                                        ? sendOne(confirming)
+                                        : send(confirming)
+                                }
+                                disabled={Boolean(sending || sendingRow)}
                             >
-                                Send {confirming.pending}
+                                {confirming.row
+                                    ? "Send"
+                                    : `Send ${confirming.pending}`}
                             </button>
                         </>
                     }
                 >
-                    <p>
-                        This emails {confirming.pending}{" "}
-                        {confirming.students_only ? "students" : "donors"} who
-                        have not had it yet. Nobody who has already been emailed
-                        is sent another.
-                    </p>
-                    <p className="modal-note">
-                        It cannot be unsent.
-                        {confirming.kind === "day_of" &&
-                            " This one is their excusal slip from class."}
-                        {dayOf && confirming.kind === "two_day"
-                            ? " Students under 17 also receive the parent consent form."
-                            : ""}
-                    </p>
+                    {confirming.row ? (
+                        <>
+                            <p>
+                                This emails the{" "}
+                                {confirming.mailing.label.toLowerCase()} to{" "}
+                                <strong>{confirming.row.full_name}</strong> at{" "}
+                                {confirming.row.email_address}, for their
+                                appointment at{" "}
+                                <strong>
+                                    {parseSlot(confirming.row.time_slot).time}
+                                </strong>
+                                .
+                            </p>
+                            <p className="modal-note">
+                                {confirming.row.two_day_sent_at ||
+                                confirming.row.day_of_sent_at
+                                    ? "They were sent an earlier copy for a different time. "
+                                    : ""}
+                                It cannot be unsent.
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <p>
+                                This emails {confirming.pending}{" "}
+                                {confirming.students_only
+                                    ? "students"
+                                    : "donors"}{" "}
+                                who have not had it yet. Nobody who has already
+                                been emailed is sent another.
+                            </p>
+                            <p className="modal-note">
+                                It cannot be unsent.
+                                {confirming.kind === "day_of" &&
+                                    " This one is their excusal slip from class."}
+                                {dayOf && confirming.kind === "two_day"
+                                    ? " Students under 17 also receive the parent consent form."
+                                    : ""}
+                            </p>
+                        </>
+                    )}
                 </Modal>
             )}
         </div>

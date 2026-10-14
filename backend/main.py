@@ -246,6 +246,7 @@ async def lifespan(_: FastAPI):
     _ensure_choice_class_columns()
     _ensure_password_reset_table()
     _ensure_reminders_table()
+    _ensure_mailing_runs_table()
     _ensure_unique_constraints()
     reminders = asyncio.create_task(_reminder_scheduler())
     try:
@@ -999,6 +1000,41 @@ def _ensure_password_reset_table() -> None:
         )
 
 
+def _ensure_mailing_runs_table() -> None:
+    """Record of which mailings the scheduler has already run.
+
+    Separate from `reminders_sent`, which is per person: this says the
+    automatic send for a mailing has had its one turn. It has to outlive the
+    process, or a redeploy would re-arm the scheduler and mail anyone who
+    became due in the meantime — someone whose appointment time moved, say —
+    without a coordinator choosing to.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS mailing_runs (
+                   kind    TEXT PRIMARY KEY,
+                   ran_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+               )"""
+        )
+
+
+def _claim_mailing_run(kind: str) -> bool:
+    """Take this mailing's one automatic send, or report it already went."""
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO mailing_runs (kind) VALUES (%s) ON CONFLICT DO NOTHING",
+            (kind,),
+        )
+        return cur.rowcount == 1
+
+
+def _mailing_runs() -> dict[str, datetime]:
+    """When each mailing's automatic send ran, for the emailing page."""
+    with db_cursor() as cur:
+        cur.execute("SELECT kind, ran_at FROM mailing_runs")
+        return dict(cur.fetchall())
+
+
 def _ensure_reminders_table() -> None:
     """Record of who has been sent which reminder.
 
@@ -1019,6 +1055,13 @@ def _ensure_reminders_table() -> None:
                    error      TEXT,
                    PRIMARY KEY (sign_up_id, kind)
                )"""
+        )
+        # The appointment time the email stated. A move away from it makes
+        # that email wrong; a move back to it makes it right again, so the
+        # comparison has to be against what was sent, not against whatever
+        # the row said a moment ago.
+        cur.execute(
+            "ALTER TABLE reminders_sent ADD COLUMN IF NOT EXISTS time_slot TEXT"
         )
 
 
@@ -1581,22 +1624,21 @@ def _reminder_email(sign_up: SignUpRow, kind: str = REMINDER_TWO_DAY) -> tuple[s
 
 
 def _clear_reminders_for_slot_change(cur, sign_up_id: int, new_slot: str) -> None:
-    """Make this person due a reminder again if their time has moved.
+    """Kept for the call sites; staleness is derived, not recorded.
 
-    A reminder states the appointment time, so once the time changes the one
-    they were sent is wrong. Dropping the claim puts them back in the queue,
-    where the next send — by the scheduler or the button — gives them a
-    corrected one. Everyone else keeps theirs and is not mailed twice.
-
-    Called inside the caller's transaction, so the claim only clears if the
-    move itself commits. A move to the same slot is not a change and leaves
-    the claim alone.
+    A reminder is out of date when the time it stated differs from the time
+    the person now holds — which `_reminder_recipients` works out by
+    comparing the two. Nothing has to be written when a slot changes, and
+    nothing should be: someone moved from 9:00 to 10:00 and back to 9:00 is
+    holding a correct email again, which is only visible if the claim
+    survives both moves.
     """
-    cur.execute("SELECT time_slot FROM sign_ups WHERE id = %s", (sign_up_id,))
-    row = cur.fetchone()
-    if row is None or row[0] == new_slot:
-        return
-    cur.execute("DELETE FROM reminders_sent WHERE sign_up_id = %s", (sign_up_id,))
+    # Nothing to do: the claim stays, and whether it is stale is decided by
+    # comparing the slot it recorded against the row's current one. Deleting
+    # it here would lose the record of what was mailed, and a move back to
+    # that time could no longer be recognised as making the email right
+    # again.
+    return
 
 
 def _reminder_recipients(kind: str) -> list[SignUpRow]:
@@ -1609,7 +1651,10 @@ def _reminder_recipients(kind: str) -> list[SignUpRow]:
                   AND (NOT %s OR s.participant_type = 'student')
                   AND NOT EXISTS (
                       SELECT 1 FROM reminders_sent r
-                      WHERE r.sign_up_id = s.id AND r.kind = %s
+                      WHERE r.sign_up_id = s.id
+                        AND r.kind = %s
+                        -- Still accurate: the email stated this very time.
+                        AND r.time_slot IS NOT DISTINCT FROM s.time_slot
                   )
                 ORDER BY s.id""",
             (students_only, kind),
@@ -1617,7 +1662,7 @@ def _reminder_recipients(kind: str) -> list[SignUpRow]:
         return [_row_to_sign_up(row) for row in cur.fetchall()]
 
 
-def _claim_reminder(sign_up_id: int, kind: str) -> bool:
+def _claim_reminder(sign_up_id: int, kind: str, time_slot: str = "") -> bool:
     """Take this person's reminder, returning False if someone already had it.
 
     The insert is the claim: the primary key makes a second one fail, so two
@@ -1626,9 +1671,18 @@ def _claim_reminder(sign_up_id: int, kind: str) -> bool:
     """
     with db_cursor(commit=True) as cur:
         cur.execute(
-            """INSERT INTO reminders_sent (sign_up_id, kind) VALUES (%s, %s)
-               ON CONFLICT (sign_up_id, kind) DO NOTHING""",
-            (sign_up_id, kind),
+            """INSERT INTO reminders_sent (sign_up_id, kind, time_slot)
+               VALUES (%s, %s, %s)
+               ON CONFLICT (sign_up_id, kind) DO UPDATE
+                   SET time_slot = EXCLUDED.time_slot,
+                       sent_at = NOW(),
+                       error = NULL
+                   -- Only when the held claim is for a different time; an
+                   -- identical one means someone already mailed this, and
+                   -- the row must not be taken twice.
+                   WHERE reminders_sent.time_slot
+                         IS DISTINCT FROM EXCLUDED.time_slot""",
+            (sign_up_id, kind, time_slot),
         )
         return cur.rowcount == 1
 
@@ -1654,7 +1708,7 @@ def send_reminders(kind: str) -> dict:
     failed = 0
 
     for sign_up in recipients:
-        if not _claim_reminder(sign_up.id, kind):
+        if not _claim_reminder(sign_up.id, kind, sign_up.time_slot):
             continue  # Someone else got there first.
         subject, html_body, text_body = _reminder_email(sign_up, kind)
         attachments = (
@@ -1685,31 +1739,43 @@ REMINDER_POLL_SECONDS = 60
 
 
 async def _reminder_scheduler() -> None:
-    """Send each mailing once its hour arrives, then stand down.
+    """Send each mailing once, at its hour, and never again.
 
     Runs inside the API rather than as a cron job because the service is a
-    single always-on web process. Sending is guarded by the claims table, so
-    a restart at any moment — including mid-send — resumes rather than
-    repeats, and a restart after the send does nothing at all.
+    single always-on web process.
+
+    Each mailing is attempted exactly one time. Anyone who becomes due
+    afterwards — someone confirmed late, or whose appointment time moved, so
+    the reminder they were sent is now wrong — is left for a coordinator to
+    send from the emailing page. A loop that kept picking them up would mail
+    people the moment a time was dragged on the dashboard, which is not a
+    decision software should be making on anyone's behalf.
     """
     while True:
         try:
             now = datetime.now(timezone.utc)
-            done = 0
             for kind, spec in REMINDER_SCHEDULE.items():
                 if now < spec["send_at"]:
                     continue
+                # Claimed in the database before sending, so this mailing's
+                # automatic turn is spent even across a redeploy.
+                if not await asyncio.to_thread(_claim_mailing_run, kind):
+                    continue
                 # Off the event loop: the sends are blocking HTTP calls.
                 result = await asyncio.to_thread(send_reminders, kind)
-                if result["considered"] == 0:
-                    done += 1
-            # Every mailing has come due and has nobody left to send to.
-            if done == len(REMINDER_SCHEDULE):
-                logger.info("All reminders sent; scheduler idle.")
+                logger.info(
+                    "%s: sent %d of %d due",
+                    kind,
+                    result["sent"],
+                    result["considered"],
+                )
+            ran = await asyncio.to_thread(_mailing_runs)
+            if set(ran) >= set(REMINDER_SCHEDULE):
+                logger.info("Every mailing has run; scheduler idle.")
                 return
         except Exception:
-            # Never let a bad run kill the loop — the next tick retries, and
-            # whoever was already claimed stays claimed.
+            # Never let a bad tick kill the loop — the mailings not yet due
+            # still need their turn.
             logger.exception("Reminder scheduler tick failed")
         await asyncio.sleep(REMINDER_POLL_SECONDS)
 
@@ -1989,8 +2055,13 @@ class ReminderRow(BaseModel):
     time_slot: str
     two_day_sent_at: datetime | None = None
     two_day_error: str | None = None
+    # The appointment time that email stated. Differs from `time_slot` when
+    # they have been moved since, which is what makes a resend worth
+    # offering — and what makes a move back to the original not.
+    two_day_slot: str | None = None
     day_of_sent_at: datetime | None = None
     day_of_error: str | None = None
+    day_of_slot: str | None = None
 
 
 class MailingStatus(BaseModel):
@@ -2004,6 +2075,10 @@ class MailingStatus(BaseModel):
     sent: int
     failed: int
     pending: int
+    # When the automatic send ran, or null if it has not. Anyone pending
+    # after this has become due since — confirmed late, or moved to another
+    # time — and is waiting for a coordinator to send to them.
+    ran_at: datetime | None = None
 
 
 class EmailingStatus(BaseModel):
@@ -2020,8 +2095,8 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
         cur.execute(
             """SELECT s.id, s.full_name, s.email_address, s.participant_type,
                       s.time_slot,
-                      t.sent_at, t.error,
-                      d.sent_at, d.error
+                      t.sent_at, t.error, t.time_slot,
+                      d.sent_at, d.error, d.time_slot
                FROM sign_ups s
                LEFT JOIN reminders_sent t
                  ON t.sign_up_id = s.id AND t.kind = %s
@@ -2040,13 +2115,16 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
                 time_slot=row[4] or "",
                 two_day_sent_at=row[5],
                 two_day_error=row[6],
-                day_of_sent_at=row[7],
-                day_of_error=row[8],
+                two_day_slot=row[7],
+                day_of_sent_at=row[8],
+                day_of_error=row[9],
+                day_of_slot=row[10],
             )
             for row in cur.fetchall()
         ]
 
     now = datetime.now(timezone.utc)
+    runs = _mailing_runs()
     mailings = []
     for kind, spec in REMINDER_SCHEDULE.items():
         # Students only for the day-of slip, so the totals count only them.
@@ -2070,6 +2148,7 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
                 sent=sent,
                 failed=failed,
                 pending=len(eligible) - sent - failed,
+                ran_at=runs.get(kind),
             )
         )
 
@@ -2078,14 +2157,8 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
     )
 
 
-@app.post("/emailing/send/{kind}")
-def send_reminders_now(kind: str, _: str = Depends(get_current_coordinator)):
-    """Send one mailing to anyone who has not had it.
-
-    The same guarded send the scheduler runs, so pressing this after it has
-    already gone out mails nobody. Refused before the hour: a two-day
-    reminder that lands early is not a two-day reminder.
-    """
+def _assert_mailing_open(kind: str) -> dict:
+    """The mailing's spec, if it exists and its hour has come."""
     spec = REMINDER_SCHEDULE.get(kind)
     if spec is None:
         raise HTTPException(status_code=404, detail="No such mailing.")
@@ -2097,6 +2170,73 @@ def send_reminders_now(kind: str, _: str = Depends(get_current_coordinator)):
                 f"{spec['send_at'].strftime('%-I:%M %p on %B %-d')}."
             ),
         )
+    return spec
+
+
+@app.post("/emailing/send/{kind}/{sign_up_id}")
+def send_reminder_to_one(
+    kind: str,
+    sign_up_id: int,
+    _: str = Depends(get_current_coordinator),
+):
+    """Send one mailing to one person, from the row's own button.
+
+    For the case the bulk send is wrong for: somebody confirmed late, or
+    whose appointment time moved so the reminder they hold is out of date.
+    Guarded the same way, so a second press does nothing.
+    """
+    spec = _assert_mailing_open(kind)
+
+    with db_cursor() as cur:
+        cur.execute(
+            f"SELECT {SIGN_UP_COLUMNS} FROM sign_ups WHERE id = %s", (sign_up_id,)
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Sign-up not found")
+
+    sign_up = _row_to_sign_up(row)
+    if not sign_up.confirmed:
+        raise HTTPException(
+            status_code=409, detail="This sign-up has no appointment time yet."
+        )
+    if spec["students_only"] and sign_up.participant_type != "student":
+        raise HTTPException(
+            status_code=409, detail=f"{spec['label']} goes to students only."
+        )
+    if not _claim_reminder(sign_up.id, kind, sign_up.time_slot):
+        raise HTTPException(
+            status_code=409,
+            detail="They already have this email for that appointment time.",
+        )
+
+    subject, html_body, text_body = _reminder_email(sign_up, kind)
+    attachments = (
+        _consent_form_attachments()
+        if sign_up.participant_type == "student"
+        and (sign_up.age or 0) < CONSENT_REQUIRED_UNDER_AGE
+        else None
+    )
+    try:
+        _send_email(sign_up.email_address, subject, html_body, text_body, attachments)
+    except Exception as err:  # noqa: BLE001 — recorded, not raised
+        logger.exception("Reminder to %s failed", sign_up.email_address)
+        _record_reminder_error(sign_up.id, kind, str(err))
+        raise HTTPException(
+            status_code=502, detail="That email could not be sent."
+        ) from err
+    return {"sent": 1}
+
+
+@app.post("/emailing/send/{kind}")
+def send_reminders_now(kind: str, _: str = Depends(get_current_coordinator)):
+    """Send one mailing to anyone who has not had it.
+
+    The same guarded send the scheduler runs, so pressing this after it has
+    already gone out mails nobody. Refused before the hour: a two-day
+    reminder that lands early is not a two-day reminder.
+    """
+    _assert_mailing_open(kind)
     return send_reminders(kind)
 
 
