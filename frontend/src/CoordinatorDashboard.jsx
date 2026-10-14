@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Header from "./Header.jsx";
+import DashboardTabs from "./DashboardTabs.jsx";
 import ProfilePill from "./ProfilePill.jsx";
 import Modal from "./Modal.jsx";
 import Spinner from "./Spinner.jsx";
@@ -237,9 +238,7 @@ export default function CoordinatorDashboard() {
             </Header>
 
             <main className="dashboard-content">
-                <h2 className="dashboard-section-title">
-                    Coordinator Dashboard
-                </h2>
+<DashboardTabs />
 
                 <div className="dashboard-body">
                     {error && <p className="login-error">{error}</p>}

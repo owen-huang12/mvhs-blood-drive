@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Header from "./Header.jsx";
+import DashboardTabs from "./DashboardTabs.jsx";
 import ProfilePill from "./ProfilePill.jsx";
 import Spinner from "./Spinner.jsx";
 import SlotRing from "./SlotRing.jsx";
@@ -387,6 +388,24 @@ export default function DayOfStation() {
     };
 
     /**
+     * Keep the moving end of the selection on screen.
+     *
+     * Arrowing down a table of seventy rows walks the block off the bottom
+     * of the window, where the desk cannot see what they are about to
+     * clear. Driven by the corner that moves rather than by the key that
+     * moved it, so it is right however the block got there.
+     *
+     * `nearest` scrolls only when the cell is actually out of view, so a
+     * move within the visible rows does not jolt the page.
+     */
+    useEffect(() => {
+        if (!handleCell) return;
+        tableRef.current
+            ?.querySelector(`[data-cell="${handleCell}"]`)
+            ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }, [handleCell]);
+
+    /**
      * Anything outside the time cells dismisses the selection.
      *
      * Clicking elsewhere means the desk has moved on — to a checkbox, to
@@ -522,7 +541,7 @@ export default function DayOfStation() {
                 <ProfilePill name={name} color={color} />
             </Header>
             <main className="dashboard-content">
-                <h2 className="dashboard-section-title">Check-In Station</h2>
+                <DashboardTabs />
 
                 <div className="dashboard-body">
                     {error && <p className="login-error">{error}</p>}

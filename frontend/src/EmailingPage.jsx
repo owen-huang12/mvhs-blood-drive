@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Header from "./Header.jsx";
+import DashboardTabs from "./DashboardTabs.jsx";
 import ProfilePill from "./ProfilePill.jsx";
 import Modal from "./Modal.jsx";
 import Spinner from "./Spinner.jsx";
@@ -123,6 +124,9 @@ function SentCell({ row, mailing, onSend, sending }) {
     const sentAt = kind === "day_of" ? row.day_of_sent_at : row.two_day_sent_at;
     const error = kind === "day_of" ? row.day_of_error : row.two_day_error;
 
+    // Never delivered — refused by the server, or accepted and then
+    // bounced. Either way the thing to do is send it again, so the cell
+    // reads the same as one that was never sent.
     if (error) {
         return (
             <td className="sent-cell">
@@ -133,18 +137,25 @@ function SentCell({ row, mailing, onSend, sending }) {
                     disabled={sending}
                     onClick={() => onSend(row, mailing)}
                 >
-                    {sending ? "Sending…" : "Retry"}
+                    {sending ? "Sending…" : "Send"}
                 </button>
             </td>
         );
     }
 
-    // Sent for the time they still hold: nothing to do.
-    if (sentAt && row.time_slot === (kind === "day_of" ? row.day_of_slot : row.two_day_slot)) {
+    // Sent for the time and address they still hold: nothing to do. Either
+    // changing since means the copy that went out is wrong or reached
+    // nobody, so the cell offers to send again.
+    const sentSlot = kind === "day_of" ? row.day_of_slot : row.two_day_slot;
+    const sentEmail = kind === "day_of" ? row.day_of_email : row.two_day_email;
+    if (
+        sentAt &&
+        sentSlot === row.time_slot &&
+        sentEmail === row.email_address
+    ) {
         return <td className="sent-cell">{formatSent(sentAt)}</td>;
     }
 
-    // Sent, but for a time that has since changed — or never sent at all.
     return (
         <td className="sent-cell">
             <button
@@ -272,7 +283,7 @@ export default function EmailingPage() {
             </Header>
 
             <main className="dashboard-content">
-                <h2 className="dashboard-section-title">Emailing</h2>
+                <DashboardTabs />
 
                 <div className="dashboard-body">
                     {error && <p className="login-error">{error}</p>}

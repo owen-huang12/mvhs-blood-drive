@@ -38,6 +38,36 @@
    here down is set at 80% of the public site's scale, which is what these
    screens looked like at 80% browser zoom. It buys a few more rows of table
    on one screen without anyone having to zoom out first. */
+/* The coordinator pages, as the title bar: the bar was already the page's
+   name, so the tabs take its place rather than adding a second strip. */
+.dashboard-tabs {
+  display: flex;
+  width: 100%;
+  background-color: var(--coral);
+}
+
+.dashboard-tab {
+  font-family: 'Antic Slab', serif;
+  font-weight: 600;
+  font-size: 0.84rem;
+  letter-spacing: 0.01em;
+  padding: 10px 24px;
+  color: #fff;
+  text-decoration: none;
+  /* Only the tint changes on hover and selection, so the text never moves. */
+  transition: background-color 0.15s ease;
+}
+
+.dashboard-tab:hover {
+  background-color: color-mix(in srgb, var(--coral) 97%, #000);
+}
+
+/* The page being viewed, a touch deeper than the bar around it. Dark enough
+   to find at a glance, light enough not to read as a separate element. */
+.dashboard-tab.is-active {
+  background-color: color-mix(in srgb, var(--coral) 94%, #000);
+}
+
 .dashboard-section-title {
   width: 100%;
   background-color: var(--coral);

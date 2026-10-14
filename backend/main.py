@@ -1068,6 +1068,18 @@ def _ensure_reminders_table() -> None:
         cur.execute(
             "ALTER TABLE reminders_sent ADD COLUMN IF NOT EXISTS time_slot TEXT"
         )
+        # Resend's id for the email, so its delivery can be checked later.
+        # Accepting an email is not delivering it: a bounce arrives minutes
+        # afterwards and is only visible by asking Resend about this id.
+        cur.execute(
+            "ALTER TABLE reminders_sent ADD COLUMN IF NOT EXISTS provider_id TEXT"
+        )
+        # The address it was sent to. A corrected email — a typo in a student
+        # ID, say — means the copy that went out reached nobody, and the row
+        # should offer a resend rather than claim it arrived.
+        cur.execute(
+            "ALTER TABLE reminders_sent ADD COLUMN IF NOT EXISTS email_address TEXT"
+        )
 
 
 def _ensure_unique_constraints() -> None:
@@ -1123,8 +1135,10 @@ def _send_email(
     html_body: str,
     text_body: str,
     attachments: list[dict] | None = None,
-) -> None:
-    """Send one email through Resend. Runs as a background task.
+) -> str | None:
+    """Send one email through Resend, returning its id.
+
+    Runs as a background task.
 
     Every email ends with how to reach the drive, added here so no email can
     leave it out. Failures are logged, not raised: by the time this runs the
@@ -1142,7 +1156,7 @@ def _send_email(
             logger.warning(
                 "RESEND_API_KEY is not set. Email to %s (%s):\n%s", to, subject, text_body
             )
-        return
+        return None
 
     params = {
         "from": EMAIL_FROM,
@@ -1161,9 +1175,13 @@ def _send_email(
         params["reply_to"] = CONTACT_EMAIL
     try:
         resend.api_key = RESEND_API_KEY
-        resend.Emails.send(params)
+        sent = resend.Emails.send(params)
     except Exception:
         logger.exception("Could not send %r to %s", subject, to)
+        return None
+    # Returned so a caller can ask Resend about it afterwards: accepting an
+    # email is not delivering it, and a bounce only shows up minutes later.
+    return (sent or {}).get("id") if isinstance(sent, dict) else getattr(sent, "id", None)
 
 
 def _first_name(name: str) -> str:
@@ -1646,6 +1664,80 @@ def _clear_reminders_for_slot_change(cur, sign_up_id: int, new_slot: str) -> Non
     return
 
 
+# Resend's `last_event` values that mean the email did not reach anyone.
+# "suppressed" is Resend declining to retry an address that already bounced,
+# which is the same outcome from the desk's point of view.
+UNDELIVERED_EVENTS = frozenset({"bounced", "complained", "suppressed"})
+
+# How many of the most recent emails to look through when checking. One page
+# comfortably covers a drive's mailings; older ones have long since settled.
+DELIVERY_PAGE_SIZE = 100
+
+
+def refresh_delivery_errors() -> int:
+    """Mark reminders that Resend accepted but never delivered.
+
+    A send only means Resend took the email. A bad address bounces minutes
+    later, with nothing to tell us — so the page asks Resend what became of
+    each one and records any that did not arrive. Those rows then offer a
+    Send button again, which is the useful thing to do about them.
+
+    Matched by Resend's own id where we have it, and by recipient address
+    for the mailings sent before ids were kept.
+    """
+    if not RESEND_API_KEY:
+        return 0
+
+    try:
+        resend.api_key = RESEND_API_KEY
+        page = resend.Emails.list({"limit": DELIVERY_PAGE_SIZE})
+    except Exception:
+        logger.exception("Could not read delivery status from Resend")
+        return 0
+
+    items = page.get("data", page) if isinstance(page, dict) else page
+    by_id: dict[str, str] = {}
+    by_address: dict[str, str] = {}
+    for item in items or []:
+        event = (item.get("last_event") or "").lower()
+        if event not in UNDELIVERED_EVENTS:
+            continue
+        if item.get("id"):
+            by_id[item["id"]] = event
+        for address in item.get("to") or []:
+            # Keeps the most recent outcome for an address, since the list
+            # arrives newest first.
+            by_address.setdefault(address.lower(), event)
+
+    if not by_id and not by_address:
+        return 0
+
+    marked = 0
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """SELECT r.sign_up_id, r.kind, r.provider_id, s.email_address
+               FROM reminders_sent r
+               JOIN sign_ups s ON s.id = r.sign_up_id
+               WHERE r.error IS NULL"""
+        )
+        for sign_up_id, kind, provider_id, address in cur.fetchall():
+            event = by_id.get(provider_id or "") or by_address.get(
+                (address or "").lower(), ""
+            )
+            if not event:
+                continue
+            cur.execute(
+                """UPDATE reminders_sent SET error = %s
+                   WHERE sign_up_id = %s AND kind = %s""",
+                (f"Not delivered: {event}", sign_up_id, kind),
+            )
+            marked += cur.rowcount
+
+    if marked:
+        logger.info("Marked %d reminder(s) as undelivered", marked)
+    return marked
+
+
 def _reminder_recipients(kind: str) -> list[SignUpRow]:
     """Confirmed donors who have not been sent this mailing yet."""
     students_only = REMINDER_SCHEDULE[kind]["students_only"]
@@ -1658,8 +1750,11 @@ def _reminder_recipients(kind: str) -> list[SignUpRow]:
                       SELECT 1 FROM reminders_sent r
                       WHERE r.sign_up_id = s.id
                         AND r.kind = %s
-                        -- Still accurate: the email stated this very time.
+                        -- Still accurate: sent to this address, about
+                        -- this very time.
                         AND r.time_slot IS NOT DISTINCT FROM s.time_slot
+                        AND r.email_address
+                                IS NOT DISTINCT FROM s.email_address
                   )
                 ORDER BY s.id""",
             (students_only, kind),
@@ -1667,7 +1762,9 @@ def _reminder_recipients(kind: str) -> list[SignUpRow]:
         return [_row_to_sign_up(row) for row in cur.fetchall()]
 
 
-def _claim_reminder(sign_up_id: int, kind: str, time_slot: str = "") -> bool:
+def _claim_reminder(
+    sign_up_id: int, kind: str, time_slot: str = "", email_address: str = ""
+) -> bool:
     """Take this person's reminder, returning False if someone already had it.
 
     The insert is the claim: the primary key makes a second one fail, so two
@@ -1676,20 +1773,37 @@ def _claim_reminder(sign_up_id: int, kind: str, time_slot: str = "") -> bool:
     """
     with db_cursor(commit=True) as cur:
         cur.execute(
-            """INSERT INTO reminders_sent (sign_up_id, kind, time_slot)
-               VALUES (%s, %s, %s)
+            """INSERT INTO reminders_sent
+                   (sign_up_id, kind, time_slot, email_address)
+               VALUES (%s, %s, %s, %s)
                ON CONFLICT (sign_up_id, kind) DO UPDATE
                    SET time_slot = EXCLUDED.time_slot,
+                       email_address = EXCLUDED.email_address,
                        sent_at = NOW(),
-                       error = NULL
-                   -- Only when the held claim is for a different time; an
-                   -- identical one means someone already mailed this, and
-                   -- the row must not be taken twice.
+                       error = NULL,
+                       provider_id = NULL
+                   -- Only when the held claim is for a different time or a
+                   -- different address; an identical one means someone
+                   -- already mailed this, and must not be taken twice.
                    WHERE reminders_sent.time_slot
-                         IS DISTINCT FROM EXCLUDED.time_slot""",
-            (sign_up_id, kind, time_slot),
+                             IS DISTINCT FROM EXCLUDED.time_slot
+                      OR reminders_sent.email_address
+                             IS DISTINCT FROM EXCLUDED.email_address""",
+            (sign_up_id, kind, time_slot, email_address),
         )
         return cur.rowcount == 1
+
+
+def _record_provider_id(sign_up_id: int, kind: str, provider_id: str | None) -> None:
+    """Keep Resend's id for an email, so its delivery can be checked later."""
+    if not provider_id:
+        return
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """UPDATE reminders_sent SET provider_id = %s
+               WHERE sign_up_id = %s AND kind = %s""",
+            (provider_id, sign_up_id, kind),
+        )
 
 
 def _record_reminder_error(sign_up_id: int, kind: str, message: str) -> None:
@@ -1713,7 +1827,9 @@ def send_reminders(kind: str) -> dict:
     failed = 0
 
     for sign_up in recipients:
-        if not _claim_reminder(sign_up.id, kind, sign_up.time_slot):
+        if not _claim_reminder(
+            sign_up.id, kind, sign_up.time_slot, sign_up.email_address
+        ):
             continue  # Someone else got there first.
         subject, html_body, text_body = _reminder_email(sign_up, kind)
         attachments = (
@@ -1723,9 +1839,10 @@ def send_reminders(kind: str) -> dict:
             else None
         )
         try:
-            _send_email(
+            provider_id = _send_email(
                 sign_up.email_address, subject, html_body, text_body, attachments
             )
+            _record_provider_id(sign_up.id, kind, provider_id)
             sent += 1
         except Exception as err:  # noqa: BLE001 — recorded, not raised
             logger.exception("Reminder to %s failed", sign_up.email_address)
@@ -2064,9 +2181,11 @@ class ReminderRow(BaseModel):
     # they have been moved since, which is what makes a resend worth
     # offering — and what makes a move back to the original not.
     two_day_slot: str | None = None
+    two_day_email: str | None = None
     day_of_sent_at: datetime | None = None
     day_of_error: str | None = None
     day_of_slot: str | None = None
+    day_of_email: str | None = None
 
 
 class MailingStatus(BaseModel):
@@ -2095,13 +2214,19 @@ class EmailingStatus(BaseModel):
 
 @app.get("/emailing/status", response_model=EmailingStatus)
 def emailing_status(_: str = Depends(get_current_coordinator)):
-    """Who is due each mailing, who has had one, and what went wrong."""
+    """Who is due each mailing, who has had one, and what went wrong.
+
+    Delivery is checked against Resend first: an email it accepted may have
+    bounced since, and the row should offer a resend rather than claim it
+    arrived.
+    """
+    refresh_delivery_errors()
     with db_cursor() as cur:
         cur.execute(
             """SELECT s.id, s.full_name, s.email_address, s.participant_type,
                       s.time_slot,
-                      t.sent_at, t.error, t.time_slot,
-                      d.sent_at, d.error, d.time_slot
+                      t.sent_at, t.error, t.time_slot, t.email_address,
+                      d.sent_at, d.error, d.time_slot, d.email_address
                FROM sign_ups s
                LEFT JOIN reminders_sent t
                  ON t.sign_up_id = s.id AND t.kind = %s
@@ -2121,9 +2246,11 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
                 two_day_sent_at=row[5],
                 two_day_error=row[6],
                 two_day_slot=row[7],
-                day_of_sent_at=row[8],
-                day_of_error=row[9],
-                day_of_slot=row[10],
+                two_day_email=row[8],
+                day_of_sent_at=row[9],
+                day_of_error=row[10],
+                day_of_slot=row[11],
+                day_of_email=row[12],
             )
             for row in cur.fetchall()
         ]
@@ -2138,10 +2265,25 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
             for r in rows
             if not spec["students_only"] or r.participant_type == "student"
         ]
-        sent_at = "day_of_sent_at" if kind == REMINDER_DAY_OF else "two_day_sent_at"
-        error = "day_of_error" if kind == REMINDER_DAY_OF else "two_day_error"
+        prefix = "day_of" if kind == REMINDER_DAY_OF else "two_day"
+        error = f"{prefix}_error"
+
+        def accurate(r) -> bool:
+            """Sent, and for the time and address they hold now.
+
+            The same rule `_reminder_recipients` applies, so the counts and
+            the queue cannot disagree: a row whose slot or address changed
+            since reads as still to send, because that is what it is.
+            """
+            return bool(
+                getattr(r, f"{prefix}_sent_at")
+                and not getattr(r, error)
+                and getattr(r, f"{prefix}_slot") == r.time_slot
+                and getattr(r, f"{prefix}_email") == r.email_address
+            )
+
         failed = sum(1 for r in eligible if getattr(r, error))
-        sent = sum(1 for r in eligible if getattr(r, sent_at) and not getattr(r, error))
+        sent = sum(1 for r in eligible if accurate(r))
         mailings.append(
             MailingStatus(
                 kind=kind,
@@ -2209,7 +2351,9 @@ def send_reminder_to_one(
         raise HTTPException(
             status_code=409, detail=f"{spec['label']} goes to students only."
         )
-    if not _claim_reminder(sign_up.id, kind, sign_up.time_slot):
+    if not _claim_reminder(
+        sign_up.id, kind, sign_up.time_slot, sign_up.email_address
+    ):
         raise HTTPException(
             status_code=409,
             detail="They already have this email for that appointment time.",
@@ -2223,7 +2367,10 @@ def send_reminder_to_one(
         else None
     )
     try:
-        _send_email(sign_up.email_address, subject, html_body, text_body, attachments)
+        provider_id = _send_email(
+            sign_up.email_address, subject, html_body, text_body, attachments
+        )
+        _record_provider_id(sign_up.id, kind, provider_id)
     except Exception as err:  # noqa: BLE001 — recorded, not raised
         logger.exception("Reminder to %s failed", sign_up.email_address)
         _record_reminder_error(sign_up.id, kind, str(err))
