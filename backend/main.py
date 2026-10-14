@@ -213,17 +213,22 @@ class SelectionStore:
 
 selections = SelectionStore()
 
-# A coordinator's name and colour, looked up once each. Both are set by hand
-# and effectively never change during a drive, and a selection update must
-# not cost a database round trip — it fires while someone is dragging.
-_identity_cache: dict[str, tuple[str, str]] = {}
+# A coordinator's name and colour, cached briefly. A selection update fires
+# while someone is dragging, so it must not cost a database round trip every
+# time — but these are edited by hand in the coordinators table, and an
+# entry that never expired meant a colour change was invisible until the
+# process restarted. Half a minute keeps the dragging cheap while making an
+# edit show up on its own.
+IDENTITY_CACHE_SECONDS = 30
+
+_identity_cache: dict[str, tuple[float, tuple[str, str]]] = {}
 
 
 def _coordinator_identity(email: str) -> tuple[str, str]:
     """This coordinator's display name and marker colour."""
     cached = _identity_cache.get(email)
-    if cached is not None:
-        return cached
+    if cached is not None and time.monotonic() - cached[0] < IDENTITY_CACHE_SECONDS:
+        return cached[1]
 
     with db_cursor() as cur:
         cur.execute(
@@ -232,7 +237,7 @@ def _coordinator_identity(email: str) -> tuple[str, str]:
         row = cur.fetchone()
 
     identity = (row[0] if row else email, _marker_color(row[1] if row else None))
-    _identity_cache[email] = identity
+    _identity_cache[email] = (time.monotonic(), identity)
     return identity
 
 

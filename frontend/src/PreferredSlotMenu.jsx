@@ -1,7 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { animate } from "animejs";
 import { SlotPill } from "./SlotPicker.jsx";
-import { SHORT_CHOICE_LABELS } from "./timeSlots.js";
+import { isStudent } from "./participants.js";
+import {
+    SHORT_CHOICE_LABELS,
+    TIME_SLOTS,
+    formatSlot,
+} from "./timeSlots.js";
 
 /** Kept clear of the viewport edge so the panel never opens half off-screen. */
 const VIEWPORT_MARGIN = 12;
@@ -13,8 +18,12 @@ const ARROW_INSET = 20;
 const ARROW_MIN = 14;
 
 /**
- * Right-click menu on a booked row: move the person to one of the three
- * times they asked for.
+ * Right-click menu on a booked row: move the person to another time.
+ *
+ * Their three choices come first, since those are what they asked for, with
+ * the whole schedule under them — a coordinator filling the last gaps often
+ * has to put someone in a time they never picked, and having to drag them
+ * across a long table to do it is the slow way.
  *
  * Opens with a small arrow pointing at exactly where the click landed. It
  * hangs below the point, or above it when there isn't room below.
@@ -101,6 +110,28 @@ export default function PreferredSlotMenu({ signUp, anchor, isFull, onPick, onCl
                         />
                     </div>
                 ))}
+            </div>
+
+            <div className="slot-panel-divider" />
+
+            {/* The whole schedule, scrolled. Adults-only slots are left out
+                for a student, the same as the pending list's picker. */}
+            <p className="slot-panel-heading">Assign any time</p>
+            <div className="slot-panel-all">
+                {TIME_SLOTS.filter(
+                    (slot) => !(isStudent(signUp) && slot.adultsOnly),
+                ).map((slot) => {
+                    const key = formatSlot(slot);
+                    return (
+                        <SlotPill
+                            key={key}
+                            value={key}
+                            full={key !== signUp.time_slot && isFull(key)}
+                            selected={key === signUp.time_slot}
+                            onPick={pick}
+                        />
+                    );
+                })}
             </div>
         </div>
     );
