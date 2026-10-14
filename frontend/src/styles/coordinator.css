@@ -188,3 +188,96 @@
 .pending-status[data-span="3"] { grid-column: span 3; }
 
 /* Slot picker styles live in slot-picker.css. */
+
+/* ── Emailing ──────────────────────────────────────────────────────── */
+
+.emailing-intro {
+  margin: 0 0 var(--space-lg);
+  font-size: 0.736rem;
+  line-height: 1.6;
+  color: #5f5a56;
+}
+
+/* The two mailings read as two sections of the page, like Pending and
+   Appointment Slotting on the dashboard — not as cards. */
+.mailings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xl);
+  margin-bottom: var(--space-lg);
+}
+
+.mailing-note {
+  margin: 0 0 10px;
+  font-size: 0.68rem;
+  line-height: 1.6;
+  color: #6b6b6b;
+}
+
+/* The same flat rectangle as .confirm-btn, which is this dashboard's
+   action button. */
+.emailing-send {
+  font-family: 'Lato', 'Calibri', 'Trebuchet MS', sans-serif;
+  font-size: 0.64rem;
+  padding: 6px 18px;
+  border: 1.5px solid #cfc9c4;
+  border-radius: 0;
+  background: #fff;
+  color: #1a1a1a;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.emailing-send:hover:not(:disabled) {
+  border-color: var(--slate);
+  background-color: #eaf5fc;
+}
+
+/* Not open yet is the normal state until the hour comes, so it reads as
+   waiting rather than broken. */
+.emailing-send:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.emailing-result {
+  margin: 0 0 var(--space-md);
+  font-size: 0.68rem;
+  color: #42703C;
+}
+
+/* Name and email take the slack between them; everything after is sized to
+   its content, so the two sent columns stay side by side. */
+.emailing-table .name-cell,
+.emailing-table .appointment-email {
+  width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emailing-table .appointment-email { color: #5f5a56; }
+
+.emailing-table .time-col {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.emailing-table .sent-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+  color: #5f5a56;
+  border-left: 1px solid #ebe8e5;
+}
+
+/* Due but not yet sent: present, so the column is not read as broken. */
+.sent-pending { color: #b3aca6; }
+
+/* Hover carries the reason, which is too long for the cell. */
+.emailing-error {
+  color: var(--red);
+  cursor: help;
+  border-bottom: 1px dotted var(--red);
+}

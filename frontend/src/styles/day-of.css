@@ -125,7 +125,10 @@
    A dashed rule across the whole cell rather than typed hyphens: it fills
    the column whatever width it settles at, and it cannot be mistaken for a
    value or dragged into a copied selection. */
-.attendance-table .not-applicable {
+/* Also used on the emailing table, where the day-of slip does not
+   apply to staff or community members. */
+.attendance-table .not-applicable,
+.emailing-table .not-applicable {
   display: block;
   /* The width of whatever cell it is in, so it grows with the column rather
      than sitting as a fixed stub in the middle of a wide one. */

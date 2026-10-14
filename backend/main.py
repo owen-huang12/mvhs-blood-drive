@@ -3,6 +3,7 @@ import base64
 from collections import deque
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import hashlib
 import html
 import json
@@ -244,8 +245,13 @@ async def lifespan(_: FastAPI):
     _ensure_student_agreement_columns()
     _ensure_choice_class_columns()
     _ensure_password_reset_table()
+    _ensure_reminders_table()
     _ensure_unique_constraints()
-    yield
+    reminders = asyncio.create_task(_reminder_scheduler())
+    try:
+        yield
+    finally:
+        reminders.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -993,6 +999,29 @@ def _ensure_password_reset_table() -> None:
         )
 
 
+def _ensure_reminders_table() -> None:
+    """Record of who has been sent which reminder.
+
+    The whole point is to send exactly once. A row goes in *before* the email
+    does, and the primary key makes a second attempt fail rather than produce
+    a duplicate — so a redeploy mid-send resumes and skips whoever already
+    has a row, and a redeploy after a finished send mails nobody.
+
+    `sent_at` is when the row was written, and `error` holds why a send
+    failed, so the emailing page can show what needs chasing by hand.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS reminders_sent (
+                   sign_up_id INTEGER NOT NULL,
+                   kind       TEXT    NOT NULL,
+                   sent_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                   error      TEXT,
+                   PRIMARY KEY (sign_up_id, kind)
+               )"""
+        )
+
+
 def _ensure_unique_constraints() -> None:
     """Let the database, not just the routes, enforce the one-per-person rules.
 
@@ -1327,6 +1356,345 @@ def _insert_sign_up(
     return created
 
 
+# ── Two-day reminder email ─────────────────────────────────────────────
+
+# The drive itself, and when the reminder about it goes out. Written as the
+# emails read them so there is one place to change if the date moves.
+DRIVE_DATE_LONG = "Friday, October 16th, 2026"
+DRIVE_LOCATION = "MVHS Aux Gym"
+
+# The two mailings, each sent once. Anchored to the school's own timezone,
+# not the server's: Railway runs in UTC, where 8:30 AM Pacific is 15:30, and
+# a naive hour would have sent these out in the middle of the night.
+#
+# Recorded per sign-up under `kind`, so the day-of mailing can go out without
+# touching whoever already had the two-day one.
+REMINDER_TWO_DAY = "two_day"
+REMINDER_DAY_OF = "day_of"
+
+REMINDER_SCHEDULE = {
+    # Two days before, to everyone confirmed.
+    REMINDER_TWO_DAY: {
+        "label": "Two-day reminder",
+        "send_at": datetime(2026, 10, 14, 8, 30, tzinfo=ZoneInfo("America/Los_Angeles")),
+        # Students only? The two-day note goes to all three kinds.
+        "students_only": False,
+    },
+    # On the morning itself. Students only: it doubles as their excusal slip,
+    # which is meaningless to staff and community members.
+    REMINDER_DAY_OF: {
+        "label": "Day-of excusal slip",
+        "send_at": datetime(2026, 10, 16, 7, 0, tzinfo=ZoneInfo("America/Los_Angeles")),
+        "students_only": True,
+    },
+}
+
+# Stanford Blood Center's own guidance, linked from every reminder.
+SBC_ELIGIBILITY_URL = (
+    "https://stanfordbloodcenter.org/donate-blood/am-i-eligible-to-donate-blood/"
+)
+SBC_PREPARATION_URL = (
+    "https://stanfordbloodcenter.org/donate-blood/blood-donation-facts/"
+    "preparing-to-donate/"
+)
+
+
+def _appointment_time(time_slot: str) -> str:
+    """"8:30 AM (Period 2)" — the time first, since that is what they need."""
+    period, _, clock = (time_slot or "").partition(" - ")
+    if not clock:
+        return time_slot or ""
+    return f"{clock} ({period})"
+
+
+def _reminder_email(sign_up: SignUpRow, kind: str = REMINDER_TWO_DAY) -> tuple[str, str, str]:
+    """One donor's reminder, as (subject, html, text).
+
+    One body with three middle paragraphs, because the difference between a
+    student, a staff member and a community member is only what they have to
+    bring and where they go — the greeting, the appointment block and the
+    closing are the same for everyone.
+
+    The day-of mailing is the same letter sent on the morning: it says TODAY
+    rather than THIS, and carries the paragraph that makes it a student's
+    excusal slip from class.
+    """
+    day_of = kind == REMINDER_DAY_OF
+    when_word = "TODAY" if day_of else "THIS"
+    name = html.escape(_first_name(sign_up.preferred_name or sign_up.full_name))
+    when = html.escape(_appointment_time(sign_up.time_slot))
+    student = sign_up.participant_type == "student"
+    community = sign_up.participant_type == "community"
+
+    # Students and community members are told to find the Aux Gym on the map;
+    # staff know the campus.
+    location = DRIVE_LOCATION if sign_up.participant_type == "teacher" else (
+        f"{DRIVE_LOCATION} (Starred on the map)"
+    )
+
+    links = (
+        f'<a href="{SBC_ELIGIBILITY_URL}">Eligibility Requirements</a> and '
+        f'<a href="{SBC_PREPARATION_URL}">Preparation Do\u2019s and Don\u2019ts</a>'
+    )
+
+    html_body = (
+        f"<p>Hello {name},</p>"
+        "<p>You are receiving this email because you recently signed up for the "
+        "<strong>MVHS Fall Blood Drive</strong>. Thank you for scheduling your "
+        "blood donation appointment. This is a friendly reminder that your "
+        "appointment is set for:</p>"
+        f"<p><strong>Date: ({when_word}) {DRIVE_DATE_LONG}</strong><br>"
+        f"<strong>Time: {when}</strong><br>"
+        f"<strong>Location: {html.escape(location)}</strong></p>"
+    )
+    text_body = (
+        f"Hello {_first_name(sign_up.preferred_name or sign_up.full_name)},\n\n"
+        "You are receiving this email because you recently signed up for the "
+        "MVHS Fall Blood Drive. Thank you for scheduling your blood donation "
+        "appointment. This is a friendly reminder that your appointment is "
+        "set for:\n\n"
+        f"Date: ({when_word}) {DRIVE_DATE_LONG}\n"
+        f"Time: {_appointment_time(sign_up.time_slot)}\n"
+        f"Location: {location}\n\n"
+    )
+
+    if student:
+        needs_consent = (sign_up.age or 0) < CONSENT_REQUIRED_UNDER_AGE
+        consent = (
+            " and your <strong>signed "
+            f'<a href="{FRONTEND_URL}/{CONSENT_FORM_FILES[0]}">Parental Consent '
+            "Form</a> if you are 16 years old (signed in blue or black ink)</strong>"
+            if needs_consent
+            else ""
+        )
+        html_body += (
+            "<p>Kindly arrive at your appointment <strong>on time.</strong> As a "
+            "student, it is your responsibility to <strong>notify your teacher of "
+            "your absence</strong> during your allotted donation. Please ensure "
+            "that you\u2019ve done so <strong>prior to your appointment.</strong></p>"
+            + (
+                "<p><strong>This email will serve as your official excusal slip "
+                "from class.</strong> Please show this to your teacher proceeding "
+                "to your appointment. If you are scheduled during your <strong>"
+                "free period, Tutorial, Brunch, or Lunch</strong>, you may proceed "
+                "directly to your appointment.</p>"
+                if day_of
+                else ""
+            )
+            + "<p>Please remember to bring your <strong>student ID (or photo ID)"
+            f"</strong>{consent}. We recommend that you stay "
+            "<strong>well-hydrated</strong> and have a <strong>nutritious meal"
+            "</strong>"
+            + ("" if day_of else " the night and morning")
+            + " before your appointment.</p>"
+            + f"<p>We also recommend looking over the {links} provided by Stanford "
+            "to be prepared for your appointment.</p>"
+        )
+        text_body += (
+            "Kindly arrive at your appointment on time. As a student, it is your "
+            "responsibility to notify your teacher of your absence during your "
+            "allotted donation. Please ensure that you\u2019ve done so prior to "
+            "your appointment.\n\n"
+            + (
+                "This email will serve as your official excusal slip from class. "
+                "Please show this to your teacher proceeding to your appointment. "
+                "If you are scheduled during your free period, Tutorial, Brunch, "
+                "or Lunch, you may proceed directly to your appointment.\n\n"
+                if day_of
+                else ""
+            )
+            + "Please remember to bring your student ID (or photo ID)"
+            + (
+                " and your signed Parental Consent Form if you are 16 years old "
+                "(signed in blue or black ink)"
+                if needs_consent
+                else ""
+            )
+            + ". We recommend that you stay well-hydrated and have a nutritious "
+            "meal"
+            + ("" if day_of else " the night and morning")
+            + " before your appointment.\n\n"
+            "We also recommend looking over the Eligibility Requirements and "
+            "Preparation Do\u2019s and Don\u2019ts provided by Stanford to be "
+            "prepared for your appointment.\n\n"
+        )
+    elif community:
+        html_body += (
+            "<p>Kindly arrive at your appointment <strong>on time</strong>. Please "
+            "park in the <strong>Back Parking Lot</strong>. We ask that you "
+            "<strong>report directly to the Aux Gym</strong> and <strong>avoid "
+            "cutting through campus</strong>. Please remember to bring your "
+            "<strong>valid photo ID</strong>. We recommend that you stay "
+            "<strong>well-hydrated</strong> and have a <strong>nutritious meal"
+            "</strong> the night and morning before your appointment. We also "
+            f"recommend looking over the {links} provided by Stanford to be "
+            "prepared for your appointment.</p>"
+        )
+        text_body += (
+            "Kindly arrive at your appointment on time. Please park in the Back "
+            "Parking Lot. We ask that you report directly to the Aux Gym and "
+            "avoid cutting through campus. Please remember to bring your valid "
+            "photo ID. We recommend that you stay well-hydrated and have a "
+            "nutritious meal the night and morning before your appointment. We "
+            "also recommend looking over the Eligibility Requirements and "
+            "Preparation Do\u2019s and Don\u2019ts provided by Stanford to be "
+            "prepared for your appointment.\n\n"
+        )
+    else:
+        html_body += (
+            "<p>Kindly arrive at your appointment <strong>on time.</strong> Please "
+            "remember to bring your <strong>valid photo ID</strong>. We recommend "
+            "that you stay <strong>well-hydrated</strong> and have a <strong>"
+            "nutritious meal</strong> the night and morning before your "
+            "appointment.</p>"
+            f"<p>We also recommend looking over the {links} provided by Stanford "
+            "to be prepared for your appointment.</p>"
+        )
+        text_body += (
+            "Kindly arrive at your appointment on time. Please remember to bring "
+            "your valid photo ID. We recommend that you stay well-hydrated and "
+            "have a nutritious meal the night and morning before your "
+            "appointment.\n\n"
+            "We also recommend looking over the Eligibility Requirements and "
+            "Preparation Do\u2019s and Don\u2019ts provided by Stanford to be "
+            "prepared for your appointment.\n\n"
+        )
+
+    html_body += (
+        "<p>If you have any questions or need to reschedule, feel free to "
+        "contact us via \u201cReply All.\u201d</p>"
+        "<p>Thank you for your commitment to helping save lives.</p>"
+    )
+    text_body += (
+        "If you have any questions or need to reschedule, feel free to contact "
+        "us via \u201cReply All.\u201d\n\n"
+        "Thank you for your commitment to helping save lives.\n"
+    )
+
+    subject = (
+        "Today: your MVHS Blood Drive appointment "
+        f"at {_appointment_time(sign_up.time_slot)}"
+        if day_of
+        else f"Reminder: your MVHS Blood Drive appointment on {DRIVE_DATE_LONG}"
+    )
+    return subject, html_body, text_body
+
+
+def _reminder_recipients(kind: str) -> list[SignUpRow]:
+    """Confirmed donors who have not been sent this mailing yet."""
+    students_only = REMINDER_SCHEDULE[kind]["students_only"]
+    with db_cursor() as cur:
+        cur.execute(
+            f"""SELECT {SIGN_UP_COLUMNS} FROM sign_ups s
+                WHERE s.confirmed = TRUE
+                  AND (NOT %s OR s.participant_type = 'student')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM reminders_sent r
+                      WHERE r.sign_up_id = s.id AND r.kind = %s
+                  )
+                ORDER BY s.id""",
+            (students_only, kind),
+        )
+        return [_row_to_sign_up(row) for row in cur.fetchall()]
+
+
+def _claim_reminder(sign_up_id: int, kind: str) -> bool:
+    """Take this person's reminder, returning False if someone already had it.
+
+    The insert is the claim: the primary key makes a second one fail, so two
+    processes racing — or one restarting mid-send — cannot both mail the same
+    person. Claimed before the email goes out, never after.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO reminders_sent (sign_up_id, kind) VALUES (%s, %s)
+               ON CONFLICT (sign_up_id, kind) DO NOTHING""",
+            (sign_up_id, kind),
+        )
+        return cur.rowcount == 1
+
+
+def _record_reminder_error(sign_up_id: int, kind: str, message: str) -> None:
+    """Note why a reminder failed, for the emailing page to show."""
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE reminders_sent SET error = %s WHERE sign_up_id = %s AND kind = %s",
+            (message[:400], sign_up_id, kind),
+        )
+
+
+def send_reminders(kind: str) -> dict:
+    """Send one mailing to everyone who has not had it.
+
+    Safe to call repeatedly: anyone already claimed is skipped, so the
+    scheduler and the button on the emailing page can both run without
+    anybody being mailed twice.
+    """
+    recipients = _reminder_recipients(kind)
+    sent = 0
+    failed = 0
+
+    for sign_up in recipients:
+        if not _claim_reminder(sign_up.id, kind):
+            continue  # Someone else got there first.
+        subject, html_body, text_body = _reminder_email(sign_up, kind)
+        attachments = (
+            _consent_form_attachments()
+            if sign_up.participant_type == "student"
+            and (sign_up.age or 0) < CONSENT_REQUIRED_UNDER_AGE
+            else None
+        )
+        try:
+            _send_email(
+                sign_up.email_address, subject, html_body, text_body, attachments
+            )
+            sent += 1
+        except Exception as err:  # noqa: BLE001 — recorded, not raised
+            logger.exception("Reminder to %s failed", sign_up.email_address)
+            _record_reminder_error(sign_up.id, kind, str(err))
+            failed += 1
+
+    if recipients:
+        logger.info("%s: %d sent, %d failed", kind, sent, failed)
+    return {"sent": sent, "failed": failed, "considered": len(recipients)}
+
+
+# How often the scheduler looks at the clock. A minute is close enough for a
+# reminder and costs one comparison; it does not poll the database unless the
+# time has arrived.
+REMINDER_POLL_SECONDS = 60
+
+
+async def _reminder_scheduler() -> None:
+    """Send each mailing once its hour arrives, then stand down.
+
+    Runs inside the API rather than as a cron job because the service is a
+    single always-on web process. Sending is guarded by the claims table, so
+    a restart at any moment — including mid-send — resumes rather than
+    repeats, and a restart after the send does nothing at all.
+    """
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            done = 0
+            for kind, spec in REMINDER_SCHEDULE.items():
+                if now < spec["send_at"]:
+                    continue
+                # Off the event loop: the sends are blocking HTTP calls.
+                result = await asyncio.to_thread(send_reminders, kind)
+                if result["considered"] == 0:
+                    done += 1
+            # Every mailing has come due and has nobody left to send to.
+            if done == len(REMINDER_SCHEDULE):
+                logger.info("All reminders sent; scheduler idle.")
+                return
+        except Exception:
+            # Never let a bad run kill the loop — the next tick retries, and
+            # whoever was already claimed stays claimed.
+            logger.exception("Reminder scheduler tick failed")
+        await asyncio.sleep(REMINDER_POLL_SECONDS)
+
+
 # ── Sign-up confirmation email ─────────────────────────────────────────
 
 # When donors are told their assigned time will arrive. Mirrored by
@@ -1591,6 +1959,126 @@ async def stream_events(_: str = Depends(get_coordinator_or_clerk)):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+class ReminderRow(BaseModel):
+    """One donor's state for both mailings, for the emailing page."""
+    id: int
+    full_name: str
+    email_address: str
+    participant_type: str
+    time_slot: str
+    two_day_sent_at: datetime | None = None
+    two_day_error: str | None = None
+    day_of_sent_at: datetime | None = None
+    day_of_error: str | None = None
+
+
+class MailingStatus(BaseModel):
+    """One mailing: when it opens and how far it has got."""
+    kind: str
+    label: str
+    send_at: datetime
+    open_now: bool
+    students_only: bool
+    total: int
+    sent: int
+    failed: int
+    pending: int
+
+
+class EmailingStatus(BaseModel):
+    """Everything the emailing page needs to say what has happened."""
+    drive_date: str
+    mailings: list[MailingStatus]
+    rows: list[ReminderRow]
+
+
+@app.get("/emailing/status", response_model=EmailingStatus)
+def emailing_status(_: str = Depends(get_current_coordinator)):
+    """Who is due each mailing, who has had one, and what went wrong."""
+    with db_cursor() as cur:
+        cur.execute(
+            """SELECT s.id, s.full_name, s.email_address, s.participant_type,
+                      s.time_slot,
+                      t.sent_at, t.error,
+                      d.sent_at, d.error
+               FROM sign_ups s
+               LEFT JOIN reminders_sent t
+                 ON t.sign_up_id = s.id AND t.kind = %s
+               LEFT JOIN reminders_sent d
+                 ON d.sign_up_id = s.id AND d.kind = %s
+               WHERE s.confirmed = TRUE
+               ORDER BY s.id""",
+            (REMINDER_TWO_DAY, REMINDER_DAY_OF),
+        )
+        rows = [
+            ReminderRow(
+                id=row[0],
+                full_name=row[1],
+                email_address=row[2],
+                participant_type=row[3] or "student",
+                time_slot=row[4] or "",
+                two_day_sent_at=row[5],
+                two_day_error=row[6],
+                day_of_sent_at=row[7],
+                day_of_error=row[8],
+            )
+            for row in cur.fetchall()
+        ]
+
+    now = datetime.now(timezone.utc)
+    mailings = []
+    for kind, spec in REMINDER_SCHEDULE.items():
+        # Students only for the day-of slip, so the totals count only them.
+        eligible = [
+            r
+            for r in rows
+            if not spec["students_only"] or r.participant_type == "student"
+        ]
+        sent_at = "day_of_sent_at" if kind == REMINDER_DAY_OF else "two_day_sent_at"
+        error = "day_of_error" if kind == REMINDER_DAY_OF else "two_day_error"
+        failed = sum(1 for r in eligible if getattr(r, error))
+        sent = sum(1 for r in eligible if getattr(r, sent_at) and not getattr(r, error))
+        mailings.append(
+            MailingStatus(
+                kind=kind,
+                label=spec["label"],
+                send_at=spec["send_at"],
+                open_now=now >= spec["send_at"],
+                students_only=spec["students_only"],
+                total=len(eligible),
+                sent=sent,
+                failed=failed,
+                pending=len(eligible) - sent - failed,
+            )
+        )
+
+    return EmailingStatus(
+        drive_date=DRIVE_DATE_LONG, mailings=mailings, rows=rows
+    )
+
+
+@app.post("/emailing/send/{kind}")
+def send_reminders_now(kind: str, _: str = Depends(get_current_coordinator)):
+    """Send one mailing to anyone who has not had it.
+
+    The same guarded send the scheduler runs, so pressing this after it has
+    already gone out mails nobody. Refused before the hour: a two-day
+    reminder that lands early is not a two-day reminder.
+    """
+    spec = REMINDER_SCHEDULE.get(kind)
+    if spec is None:
+        raise HTTPException(status_code=404, detail="No such mailing.")
+    if datetime.now(timezone.utc) < spec["send_at"]:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{spec['label']} opens at "
+                f"{spec['send_at'].strftime('%-I:%M %p on %B %-d')}."
+            ),
+        )
+    return send_reminders(kind)
 
 
 @app.get("/sign-ups", response_model=list[SignUpRow])

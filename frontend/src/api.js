@@ -218,6 +218,14 @@ export const publishSelection = (cells, { keepalive = false } = {}) =>
         keepalive,
     });
 
+/** Who is due a reminder, who has had one, and what went wrong. */
+export const getEmailingStatus = () =>
+    request("/emailing/status", { auth: true });
+
+/** Send one mailing to anyone who has not had it. */
+export const sendReminders = (kind) =>
+    request(`/emailing/send/${kind}`, { method: "POST", auth: true });
+
 export const setDeferred = (id, deferred) =>
     request(`/sign-ups/${id}/deferred`, {
         method: "PATCH",

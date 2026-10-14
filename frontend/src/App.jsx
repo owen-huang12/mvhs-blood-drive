@@ -12,6 +12,7 @@ import CoordinatorRegisterPage from "./CoordinatorRegisterPage.jsx";
 import ForgotPasswordPage from "./ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./ResetPasswordPage.jsx";
 import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
+import EmailingPage from "./EmailingPage.jsx";
 import RequireAuth from "./RequireAuth.jsx";
 import RequirePhaseTwo from "./RequirePhaseTwo.jsx";
 import DayOfStation from "./DayOfStation.jsx";
@@ -58,6 +59,17 @@ export default function App() {
                     element={
                         <RequireAuth>
                             <CoordinatorDashboard />
+                        </RequireAuth>
+                    }
+                />
+                {/* What the drive has emailed, and the control that sends
+                    the rest. Not phase-gated: the reminders go out before
+                    the day-of pages open. */}
+                <Route
+                    path="/coordinators/emailing"
+                    element={
+                        <RequireAuth>
+                            <EmailingPage />
                         </RequireAuth>
                     }
                 />
