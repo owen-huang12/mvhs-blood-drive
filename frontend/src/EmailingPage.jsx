@@ -35,6 +35,20 @@ const formatOpens = (value) =>
         minute: "2-digit",
     });
 
+/** Who a mailing goes to, for the counts and the confirm dialog. */
+const audienceOf = (mailing) =>
+    mailing.students_only
+        ? "students"
+        : mailing.adults_only
+          ? "staff and community members"
+          : "donors";
+
+/** Whether a mailing is for this person at all. */
+const appliesTo = (mailing, row) =>
+    Boolean(mailing) &&
+    (!mailing.students_only || row.participant_type === "student") &&
+    (!mailing.adults_only || row.participant_type !== "student");
+
 /**
  * One mailing: how far it has got, and the button that sends the rest.
  *
@@ -62,11 +76,14 @@ function Mailing({ mailing, onSend, sending }) {
             </h3>
 
             <p className="mailing-note">
-                {mailing.total} {mailing.students_only ? "students" : "donors"},{" "}
+                {mailing.total} {audienceOf(mailing)},{" "}
                 {mailing.ran_at
                     ? `sent automatically ${formatOpens(mailing.ran_at)}`
                     : `${mailing.open_now ? "open since" : "opens"} ${formatOpens(mailing.send_at)}`}
                 .
+                {/* Never sent by the scheduler, so say so rather than leave
+                    it looking like one that hasn't fired yet. */}
+                {mailing.manual && " Only sent when you press the button."}
                 {/* The automatic send happens once. Anyone due after it has
                     become due since — confirmed late, or moved to another
                     time, so the reminder they have is now wrong — and is
@@ -111,8 +128,7 @@ function Mailing({ mailing, onSend, sending }) {
  * covered by the bulk send.
  */
 function SentCell({ row, mailing, onSend, sending }) {
-    const applies = !mailing?.students_only || row.participant_type === "student";
-    if (!applies) {
+    if (!appliesTo(mailing, row)) {
         return (
             <td className="sent-cell">
                 <span className="not-applicable" title="Not applicable" />
@@ -120,9 +136,10 @@ function SentCell({ row, mailing, onSend, sending }) {
         );
     }
 
+    // The row's fields for each mailing are named after its kind.
     const kind = mailing.kind;
-    const sentAt = kind === "day_of" ? row.day_of_sent_at : row.two_day_sent_at;
-    const error = kind === "day_of" ? row.day_of_error : row.two_day_error;
+    const sentAt = row[`${kind}_sent_at`];
+    const error = row[`${kind}_error`];
 
     // Never delivered — refused by the server, or accepted and then
     // bounced. Either way the thing to do is send it again, so the cell
@@ -146,8 +163,8 @@ function SentCell({ row, mailing, onSend, sending }) {
     // Sent for the time and address they still hold: nothing to do. Either
     // changing since means the copy that went out is wrong or reached
     // nobody, so the cell offers to send again.
-    const sentSlot = kind === "day_of" ? row.day_of_slot : row.two_day_slot;
-    const sentEmail = kind === "day_of" ? row.day_of_email : row.two_day_email;
+    const sentSlot = row[`${kind}_slot`];
+    const sentEmail = row[`${kind}_email`];
     if (
         sentAt &&
         sentSlot === row.time_slot &&
@@ -274,6 +291,7 @@ export default function EmailingPage() {
     };
 
     const dayOf = status?.mailings.find((m) => m.kind === "day_of");
+    const dayOfAdults = status?.mailings.find((m) => m.kind === "day_of_adults");
     const twoDay = status?.mailings.find((m) => m.kind === "two_day");
 
     return (
@@ -294,9 +312,11 @@ export default function EmailingPage() {
                         <section className="dash-section">
                             <p className="emailing-intro">
                                 Mailings for the drive on{" "}
-                                <strong>{status.drive_date}</strong>. Each one
-                                sends itself at its hour; these buttons are only
-                                needed if it hasn't.
+                                <strong>{status.drive_date}</strong>. The student
+                                mailings send themselves at their hour; these
+                                buttons are only needed if one hasn't. The staff
+                                and community day-of reminder is only sent from
+                                its button.
                             </p>
 
                             <div className="mailings">
@@ -344,7 +364,8 @@ export default function EmailingPage() {
                                                     key={row.id}
                                                     className={
                                                         row.two_day_error ||
-                                                        row.day_of_error
+                                                        row.day_of_error ||
+                                                        row.day_of_adults_error
                                                             ? "row-needs-filing"
                                                             : ""
                                                     }
@@ -385,13 +406,19 @@ export default function EmailingPage() {
                                                             `two_day:${row.id}`
                                                         }
                                                     />
-                                                    {/* The day-of slip is a
-                                                        student's excusal from
-                                                        class, so adults have
-                                                        none to receive. */}
+                                                    {/* Students get the day-of
+                                                        excusal slip; staff and
+                                                        community members get
+                                                        their own day-of note,
+                                                        in the same column. */}
                                                     <SentCell
                                                         row={row}
-                                                        mailing={dayOf}
+                                                        mailing={
+                                                            row.participant_type ===
+                                                            "student"
+                                                                ? dayOf
+                                                                : dayOfAdults
+                                                        }
                                                         onSend={(r, m) =>
                                                             setConfirming({
                                                                 row: r,
@@ -400,7 +427,12 @@ export default function EmailingPage() {
                                                         }
                                                         sending={
                                                             sendingRow ===
-                                                            `day_of:${row.id}`
+                                                            `${
+                                                                row.participant_type ===
+                                                                "student"
+                                                                    ? "day_of"
+                                                                    : "day_of_adults"
+                                                            }:${row.id}`
                                                         }
                                                     />
                                                 </tr>
@@ -464,8 +496,9 @@ export default function EmailingPage() {
                                 .
                             </p>
                             <p className="modal-note">
-                                {confirming.row.two_day_sent_at ||
-                                confirming.row.day_of_sent_at
+                                {confirming.row[
+                                    `${confirming.mailing.kind}_sent_at`
+                                ]
                                     ? "They were sent an earlier copy for a different time. "
                                     : ""}
                                 It cannot be unsent.
@@ -475,10 +508,8 @@ export default function EmailingPage() {
                         <>
                             <p>
                                 This emails {confirming.pending}{" "}
-                                {confirming.students_only
-                                    ? "students"
-                                    : "donors"}{" "}
-                                who have not had it yet. Nobody who has already
+                                {audienceOf(confirming)} who have not had it
+                                yet. Nobody who has already
                                 been emailed is sent another.
                             </p>
                             <p className="modal-note">

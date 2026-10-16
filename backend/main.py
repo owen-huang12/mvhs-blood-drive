@@ -1437,6 +1437,7 @@ DRIVE_LOCATION = "MVHS Aux Gym"
 # touching whoever already had the two-day one.
 REMINDER_TWO_DAY = "two_day"
 REMINDER_DAY_OF = "day_of"
+REMINDER_DAY_OF_ADULTS = "day_of_adults"
 
 REMINDER_SCHEDULE = {
     # Two days before, to everyone confirmed.
@@ -1453,7 +1454,23 @@ REMINDER_SCHEDULE = {
         "send_at": datetime(2026, 10, 16, 7, 0, tzinfo=ZoneInfo("America/Los_Angeles")),
         "students_only": True,
     },
+    # The same morning note for staff and community members, without the
+    # student paragraphs (telling a teacher, the excusal slip). `manual`: the
+    # scheduler never sends it; it goes only when a coordinator presses its
+    # button on the emailing page. `send_at` is just when that button opens.
+    REMINDER_DAY_OF_ADULTS: {
+        "label": "Day-of reminder (staff & community)",
+        "send_at": datetime(2026, 10, 16, 7, 0, tzinfo=ZoneInfo("America/Los_Angeles")),
+        "students_only": False,
+        "adults_only": True,
+        "manual": True,
+    },
 }
+
+# The mailings the scheduler sends by itself.
+SCHEDULED_REMINDERS = frozenset(
+    kind for kind, spec in REMINDER_SCHEDULE.items() if not spec.get("manual")
+)
 
 # Stanford Blood Center's own guidance, linked from every reminder.
 SBC_ELIGIBILITY_URL = (
@@ -1485,7 +1502,7 @@ def _reminder_email(sign_up: SignUpRow, kind: str = REMINDER_TWO_DAY) -> tuple[s
     rather than THIS, and carries the paragraph that makes it a student's
     excusal slip from class.
     """
-    day_of = kind == REMINDER_DAY_OF
+    day_of = kind in (REMINDER_DAY_OF, REMINDER_DAY_OF_ADULTS)
     when_word = "TODAY" if day_of else "THIS"
     name = html.escape(_first_name(sign_up.preferred_name or sign_up.full_name))
     when = html.escape(_appointment_time(sign_up.time_slot))
@@ -1592,7 +1609,9 @@ def _reminder_email(sign_up: SignUpRow, kind: str = REMINDER_TWO_DAY) -> tuple[s
             "cutting through campus</strong>. Please remember to bring your "
             "<strong>valid photo ID</strong>. We recommend that you stay "
             "<strong>well-hydrated</strong> and have a <strong>nutritious meal"
-            "</strong> the night and morning before your appointment. We also "
+            "</strong>"
+            + ("" if day_of else " the night and morning")
+            + " before your appointment. We also "
             f"recommend looking over the {links} provided by Stanford to be "
             "prepared for your appointment.</p>"
         )
@@ -1601,7 +1620,9 @@ def _reminder_email(sign_up: SignUpRow, kind: str = REMINDER_TWO_DAY) -> tuple[s
             "Parking Lot. We ask that you report directly to the Aux Gym and "
             "avoid cutting through campus. Please remember to bring your valid "
             "photo ID. We recommend that you stay well-hydrated and have a "
-            "nutritious meal the night and morning before your appointment. We "
+            "nutritious meal"
+            + ("" if day_of else " the night and morning")
+            + " before your appointment. We "
             "also recommend looking over the Eligibility Requirements and "
             "Preparation Do\u2019s and Don\u2019ts provided by Stanford to be "
             "prepared for your appointment.\n\n"
@@ -1611,16 +1632,18 @@ def _reminder_email(sign_up: SignUpRow, kind: str = REMINDER_TWO_DAY) -> tuple[s
             "<p>Kindly arrive at your appointment <strong>on time.</strong> Please "
             "remember to bring your <strong>valid photo ID</strong>. We recommend "
             "that you stay <strong>well-hydrated</strong> and have a <strong>"
-            "nutritious meal</strong> the night and morning before your "
-            "appointment.</p>"
+            "nutritious meal</strong>"
+            + ("" if day_of else " the night and morning")
+            + " before your appointment.</p>"
             f"<p>We also recommend looking over the {links} provided by Stanford "
             "to be prepared for your appointment.</p>"
         )
         text_body += (
             "Kindly arrive at your appointment on time. Please remember to bring "
             "your valid photo ID. We recommend that you stay well-hydrated and "
-            "have a nutritious meal the night and morning before your "
-            "appointment.\n\n"
+            "have a nutritious meal"
+            + ("" if day_of else " the night and morning")
+            + " before your appointment.\n\n"
             "We also recommend looking over the Eligibility Requirements and "
             "Preparation Do\u2019s and Don\u2019ts provided by Stanford to be "
             "prepared for your appointment.\n\n"
@@ -1746,12 +1769,15 @@ def refresh_delivery_errors() -> int:
 
 def _reminder_recipients(kind: str) -> list[SignUpRow]:
     """Confirmed donors who have not been sent this mailing yet."""
-    students_only = REMINDER_SCHEDULE[kind]["students_only"]
+    spec = REMINDER_SCHEDULE[kind]
+    students_only = spec["students_only"]
+    adults_only = spec.get("adults_only", False)
     with db_cursor() as cur:
         cur.execute(
             f"""SELECT {SIGN_UP_COLUMNS} FROM sign_ups s
                 WHERE s.confirmed = TRUE
                   AND (NOT %s OR s.participant_type = 'student')
+                  AND (NOT %s OR s.participant_type <> 'student')
                   AND NOT EXISTS (
                       SELECT 1 FROM reminders_sent r
                       WHERE r.sign_up_id = s.id
@@ -1763,7 +1789,7 @@ def _reminder_recipients(kind: str) -> list[SignUpRow]:
                                 IS NOT DISTINCT FROM s.email_address
                   )
                 ORDER BY s.id""",
-            (students_only, kind),
+            (students_only, adults_only, kind),
         )
         return [_row_to_sign_up(row) for row in cur.fetchall()]
 
@@ -1883,7 +1909,8 @@ async def _reminder_scheduler() -> None:
         try:
             now = datetime.now(timezone.utc)
             for kind, spec in REMINDER_SCHEDULE.items():
-                if now < spec["send_at"]:
+                # Manual mailings are only ever sent from the emailing page.
+                if spec.get("manual") or now < spec["send_at"]:
                     continue
                 # Claimed in the database before sending, so this mailing's
                 # automatic turn is spent even across a redeploy.
@@ -1898,7 +1925,7 @@ async def _reminder_scheduler() -> None:
                     result["considered"],
                 )
             ran = await asyncio.to_thread(_mailing_runs)
-            if set(ran) >= set(REMINDER_SCHEDULE):
+            if set(ran) >= SCHEDULED_REMINDERS:
                 logger.info("Every mailing has run; scheduler idle.")
                 return
         except Exception:
@@ -2227,6 +2254,10 @@ class ReminderRow(BaseModel):
     day_of_error: str | None = None
     day_of_slot: str | None = None
     day_of_email: str | None = None
+    day_of_adults_sent_at: datetime | None = None
+    day_of_adults_error: str | None = None
+    day_of_adults_slot: str | None = None
+    day_of_adults_email: str | None = None
 
 
 class MailingStatus(BaseModel):
@@ -2236,6 +2267,9 @@ class MailingStatus(BaseModel):
     send_at: datetime
     open_now: bool
     students_only: bool
+    adults_only: bool = False
+    # Never sent automatically; only from the emailing page's button.
+    manual: bool = False
     total: int
     sent: int
     failed: int
@@ -2267,15 +2301,18 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
             """SELECT s.id, s.full_name, s.email_address, s.participant_type,
                       s.time_slot,
                       t.sent_at, t.error, t.time_slot, t.email_address,
-                      d.sent_at, d.error, d.time_slot, d.email_address
+                      d.sent_at, d.error, d.time_slot, d.email_address,
+                      a.sent_at, a.error, a.time_slot, a.email_address
                FROM sign_ups s
                LEFT JOIN reminders_sent t
                  ON t.sign_up_id = s.id AND t.kind = %s
                LEFT JOIN reminders_sent d
                  ON d.sign_up_id = s.id AND d.kind = %s
+               LEFT JOIN reminders_sent a
+                 ON a.sign_up_id = s.id AND a.kind = %s
                WHERE s.confirmed = TRUE
                ORDER BY s.id""",
-            (REMINDER_TWO_DAY, REMINDER_DAY_OF),
+            (REMINDER_TWO_DAY, REMINDER_DAY_OF, REMINDER_DAY_OF_ADULTS),
         )
         rows = [
             ReminderRow(
@@ -2292,6 +2329,10 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
                 day_of_error=row[10],
                 day_of_slot=row[11],
                 day_of_email=row[12],
+                day_of_adults_sent_at=row[13],
+                day_of_adults_error=row[14],
+                day_of_adults_slot=row[15],
+                day_of_adults_email=row[16],
             )
             for row in cur.fetchall()
         ]
@@ -2300,13 +2341,16 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
     runs = _mailing_runs()
     mailings = []
     for kind, spec in REMINDER_SCHEDULE.items():
-        # Students only for the day-of slip, so the totals count only them.
+        # Each mailing's totals count only the people it goes to.
+        adults_only = spec.get("adults_only", False)
         eligible = [
             r
             for r in rows
-            if not spec["students_only"] or r.participant_type == "student"
+            if (not spec["students_only"] or r.participant_type == "student")
+            and (not adults_only or r.participant_type != "student")
         ]
-        prefix = "day_of" if kind == REMINDER_DAY_OF else "two_day"
+        # The ReminderRow fields are named after the kind.
+        prefix = kind
         error = f"{prefix}_error"
 
         def accurate(r) -> bool:
@@ -2332,6 +2376,8 @@ def emailing_status(_: str = Depends(get_current_coordinator)):
                 send_at=spec["send_at"],
                 open_now=now >= spec["send_at"],
                 students_only=spec["students_only"],
+                adults_only=adults_only,
+                manual=spec.get("manual", False),
                 total=len(eligible),
                 sent=sent,
                 failed=failed,
@@ -2391,6 +2437,11 @@ def send_reminder_to_one(
     if spec["students_only"] and sign_up.participant_type != "student":
         raise HTTPException(
             status_code=409, detail=f"{spec['label']} goes to students only."
+        )
+    if spec.get("adults_only") and sign_up.participant_type == "student":
+        raise HTTPException(
+            status_code=409,
+            detail=f"{spec['label']} goes to staff and community members only.",
         )
     if not _claim_reminder(
         sign_up.id, kind, sign_up.time_slot, sign_up.email_address
