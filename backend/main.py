@@ -1637,6 +1637,12 @@ def _reminder_email(sign_up: SignUpRow, kind: str = REMINDER_TWO_DAY) -> tuple[s
         "Thank you for your commitment to helping save lives.\n"
     )
 
+    # The map closes every reminder, after the sign-off — it is a reference
+    # for the day rather than part of the letter.
+    map_html, map_text = _map_section()
+    html_body += map_html
+    text_body += map_text
+
     subject = (
         "Today: your MVHS Blood Drive appointment "
         f"at {_appointment_time(sign_up.time_slot)}"
@@ -1832,12 +1838,12 @@ def send_reminders(kind: str) -> dict:
         ):
             continue  # Someone else got there first.
         subject, html_body, text_body = _reminder_email(sign_up, kind)
-        attachments = (
-            _consent_form_attachments()
-            if sign_up.participant_type == "student"
+        attachments = [_map_attachment()]
+        if (
+            sign_up.participant_type == "student"
             and (sign_up.age or 0) < CONSENT_REQUIRED_UNDER_AGE
-            else None
-        )
+        ):
+            attachments += _consent_form_attachments()
         try:
             provider_id = _send_email(
                 sign_up.email_address, subject, html_body, text_body, attachments
@@ -1946,6 +1952,41 @@ def _slot_highlight(slot: str) -> str:
     base = PERIOD_COLORS.get(period, "#ECECEC").lstrip("#")
     channels = (int(base[i : i + 2], 16) for i in (0, 2, 4))
     return "#" + "".join(f"{(c + 255) // 2:02X}" for c in channels)
+
+
+# The campus map with the Aux Gym starred, attached to every reminder and
+# shown at the foot of it. Copied from frontend/src/assets/ for the same
+# reason the consent forms are: the backend is deployed on its own and
+# cannot reach the frontend's files. Also in frontend/public/, which is
+# what the inline <img> loads — embedding 570 KB in the body would have
+# Gmail clipping the message.
+AUX_GYM_MAP_FILE = "AUX_GYM_MAP.png"
+
+
+def _map_attachment() -> dict:
+    """The campus map, as an attachment."""
+    return {
+        "filename": AUX_GYM_MAP_FILE,
+        "content": base64.b64encode(
+            (CONSENT_FORM_DIR / AUX_GYM_MAP_FILE).read_bytes()
+        ).decode(),
+    }
+
+
+def _map_section() -> tuple[str, str]:
+    """The map at the foot of an email, as (html, text).
+
+    Linked rather than embedded, and wrapped in a link of its own so it
+    still reaches anyone whose client blocks images.
+    """
+    url = f"{FRONTEND_URL}/{AUX_GYM_MAP_FILE}"
+    html_body = (
+        f'<p><a href="{url}">'
+        f'<img src="{url}" alt="Campus map with the Aux Gym starred" '
+        'width="560" style="max-width:100%;height:auto;border:0"></a></p>'
+    )
+    text_body = f"\nCampus map (the Aux Gym is starred): {url}\n"
+    return html_body, text_body
 
 
 def _consent_form_attachments() -> list[dict]:
@@ -2360,12 +2401,12 @@ def send_reminder_to_one(
         )
 
     subject, html_body, text_body = _reminder_email(sign_up, kind)
-    attachments = (
-        _consent_form_attachments()
-        if sign_up.participant_type == "student"
+    attachments = [_map_attachment()]
+    if (
+        sign_up.participant_type == "student"
         and (sign_up.age or 0) < CONSENT_REQUIRED_UNDER_AGE
-        else None
-    )
+    ):
+        attachments += _consent_form_attachments()
     try:
         provider_id = _send_email(
             sign_up.email_address, subject, html_body, text_body, attachments
